@@ -2,14 +2,13 @@
   "name": "job-planning-system",
   "version": "1.0.0",
   "scripts": {
-    "start": "pm2 start ecosystem.config.js",
+    "start": "cd server && node server.js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
-    "postinstall": "npm run install:all",
     "install:all": "cd server && npm install && cd ../client && npm install",
     "build": "cd client && npm install && npm run build",
-    "deploy": "bash start.sh"
+    "deploy": "npm run install:all && npm run build"
   },
   "devDependencies": {
     "concurrently": "^10.0.4"

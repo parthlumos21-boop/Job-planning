@@ -4,14 +4,14 @@ echo "=========================================="
 echo "  Job Planning System - VPS Deployment"
 echo "=========================================="
 
-# 1. Install dependencies for the server
+# 1. Install server dependencies
 echo ""
 echo "📦 Installing server dependencies..."
 cd server
 npm install --production
 cd ..
 
-# 2. Install dependencies for the client and build it
+# 2. Install client dependencies and build
 echo ""
 echo "📦 Installing client dependencies and building..."
 cd client
@@ -19,26 +19,28 @@ npm install
 npm run build
 cd ..
 
-# 3. Stop any existing PM2 process
+# 3. Start the server
 echo ""
-echo "🔄 Stopping existing PM2 process (if any)..."
-pm2 stop ecosystem.config.js 2>/dev/null || true
-pm2 delete ecosystem.config.js 2>/dev/null || true
+echo "🚀 Starting server..."
 
-# 4. Start the backend with PM2
-echo ""
-echo "🚀 Starting backend with PM2..."
-pm2 start ecosystem.config.js --env production
-
-# 5. Save PM2 list so it restarts on system reboot
-pm2 save
+# Check if PM2 is available
+if command -v pm2 &> /dev/null; then
+    echo "Using PM2..."
+    pm2 stop ecosystem.config.js 2>/dev/null || true
+    pm2 delete ecosystem.config.js 2>/dev/null || true
+    pm2 start ecosystem.config.js --env production
+    pm2 save
+    echo "✅ Started with PM2"
+else
+    echo "PM2 not found, starting with node directly..."
+    cd server
+    node server.js &
+    cd ..
+    echo "✅ Started with node"
+fi
 
 echo ""
 echo "=========================================="
 echo "✅ Deployment complete!"
 echo "   Server running on port 3005"
-echo "   PM2 process: job-planning-system"
 echo "=========================================="
-echo ""
-echo "Make sure Nginx is configured to proxy /api to port 3005."
-echo ""
