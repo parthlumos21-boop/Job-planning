@@ -1,74 +1,100 @@
-# VPS Deployment
+# VPS Deployment Guide (Hostinger)
 
-## Runtime
+## Project Structure
 
-- Node.js 18 or newer
+```
+job-planning/
+├── client/          ← React frontend (Vite)
+├── server/          ← Node.js backend (Express + MongoDB)
+├── backend/         ← Legacy scripts (migrations, seeds)
+├── docs/            ← Documentation
+├── ecosystem.config.js  ← PM2 config
+├── start.sh         ← One-command VPS deployment script
+├── start.js         ← Local dev launcher
+├── nginx.conf       ← Nginx reverse proxy config
+└── package.json     ← Root scripts (dev, build, deploy)
+```
+
+## Requirements
+
+- Node.js 18+
 - npm
 - MongoDB
-- A process manager such as PM2
-- Optional reverse proxy: Nginx
+- PM2 (`npm install -g pm2`)
+- Nginx (reverse proxy)
 
-## Setup
+---
+
+## Step 1: Clone from GitHub
+
+```bash
+cd /var/www
+git clone https://github.com/parthlumos21-boop/Job-planning.git job-planning
+cd job-planning
+```
+
+## Step 2: Create Environment File
+
+```bash
+cp server/.env.example server/.env
+nano server/.env
+```
+
+Set these values in `server/.env`:
+```
+PORT=4000
+MONGO_URI=mongodb://localhost:27017/job_planning_db
+JWT_SECRET=<your-secure-secret-key>
+```
+
+## Step 3: Deploy (One Command)
+
+```bash
+bash start.sh
+```
+
+This will:
+1. Install server dependencies
+2. Install client dependencies
+3. Build the React frontend
+4. Start the backend with PM2
+
+## Step 4: Configure Nginx
+
+```bash
+sudo cp nginx.conf /etc/nginx/sites-available/job-planning
+sudo ln -s /etc/nginx/sites-available/job-planning /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+> **Note:** Edit `nginx.conf` to replace `yourdomain.com` with your actual domain.
+
+---
+
+## PM2 Commands
+
+| Command | Description |
+|---------|-------------|
+| `pm2 status` | Check if app is running |
+| `pm2 logs job-planning-system` | View live logs |
+| `pm2 restart job-planning-system` | Restart the app |
+| `pm2 stop job-planning-system` | Stop the app |
+
+## Update Deployment (After Git Push)
 
 ```bash
 cd /var/www/job-planning
-npm run install:all
-cp server/.env.example server/.env
+git pull origin main
+bash start.sh
 ```
 
-Edit `server/.env` and set:
+## npm Scripts Reference
 
-- `MONGO_URI`
-- `JWT_SECRET`
-- `PORT`
-- `HOST`
-
-Run the workflow migration once after uploading new code:
-
-```bash
-cd server
-npm run migrate:workflow
-npm run seed:accounts
-```
-
-Start the app:
-
-```bash
-npm start
-```
-
-The Node server serves both API routes and the frontend on `PORT`.
-
-## PM2
-
-```bash
-cd /var/www/job-planning/server
-pm2 start server.js --name job-planning
-pm2 save
-```
-
-Or from the project root:
-
-```bash
-pm2 start ecosystem.config.js
-pm2 save
-```
-
-## Nginx Reverse Proxy
-
-```nginx
-server {
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Keep MongoDB backed up before imports or migrations.
+| Script | Command | Description |
+|--------|---------|-------------|
+| `npm run dev` | Local development | Runs server + client together |
+| `npm run build` | Production build | Builds React frontend |
+| `npm start` | PM2 start | Starts server via PM2 |
+| `npm run deploy` | Full deploy | Runs `start.sh` |
+| `npm run install:all` | Install deps | Installs server + client deps |
