@@ -10,6 +10,7 @@ require("dotenv").config({ override: true });
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
+const compression = require("compression");
 
 const departmentsRoutes = require("./routes/departments");
 const usersRoutes = require("./routes/users");
@@ -24,6 +25,7 @@ const PORT = process.env.PORT || 4000;
 const HOST = process.env.HOST || "0.0.0.0";
 
 app.use(cors());
+app.use(compression());
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);

@@ -45,4 +45,9 @@ const JobSchema = new mongoose.Schema({
   }
 }, { timestamps: true, minimize: false });
 
+JobSchema.index({ jobNo: 1 });
+JobSchema.index({ clientName: 1 });
+JobSchema.index({ projectName: 1 });
+JobSchema.index({ panelName: 1 });
+
 module.exports = mongoose.model('Job', JobSchema);

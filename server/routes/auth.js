@@ -3,7 +3,11 @@ const jwt = require('jsonwebtoken');
 const db = require('../database/db');
 
 const router = express.Router();
-const SECRET_KEY = process.env.JWT_SECRET || 'your_super_secret_key';
+const SECRET_KEY = process.env.JWT_SECRET;
+if (!SECRET_KEY || SECRET_KEY === 'your_super_secret_key') {
+  console.error("FATAL ERROR: JWT_SECRET environment variable is missing or insecure!");
+  process.exit(1);
+}
 
 router.post('/login', async (req, res) => {
   const username = String(req.body.username || "").trim().toLowerCase();
