@@ -20,7 +20,7 @@ const authRoutes = require("./routes/auth");
 const authenticateToken = require("./middleware/auth");
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3005;
 const HOST = process.env.HOST || "0.0.0.0";
 
 app.use(cors());

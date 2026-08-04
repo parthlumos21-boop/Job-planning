@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "npx kill-port 4000 && node server.js",
+    "dev": "npx kill-port 3005 && node server.js",
     "reimport": "node database/import.js",
     "migrate:workflow": "node database/migrate-job-workflow.js",
     "seed:accounts": "node database/seed-accounts.js"

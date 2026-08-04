@@ -4,7 +4,7 @@ const fs = require('fs');
 
 // Determine Backend Port from server/.env
 const envPath = path.join(__dirname, 'server', '.env');
-let backendPort = 4000;
+let backendPort = 3005;
 if (fs.existsSync(envPath)) {
     const envContent = fs.readFileSync(envPath, 'utf8');
     const portMatch = envContent.match(/^PORT=(\d+)/m);

@@ -42,7 +42,7 @@ nano server/.env
 
 Set these values in `server/.env`:
 ```
-PORT=4000
+PORT=3005
 MONGO_URI=mongodb://localhost:27017/job_planning_db
 JWT_SECRET=<your-secure-secret-key>
 ```

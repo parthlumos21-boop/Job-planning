@@ -60,7 +60,7 @@ npm install
 npm start
 ```
 
-Then open **http://localhost:4000** in your browser. The backend also
+Then open **http://localhost:3005** in your browser. The backend also
 serves the frontend, so that's the only URL you need.
 
 ## VPS deployment
