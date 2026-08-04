@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Job Planning & Tracking Register</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="snow-bg"></div>
+  <div class="snow-bg-2"></div>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo-container">
+          <img class="brand-logo" src="assets/21.png" alt="Swati Switchgears Logo" onerror="this.outerHTML='<span class=\'brand-mark\'>LOGO</span>'">
+        </div>
+        <div>
+          <p class="subtitle" style="margin: 0; font-size: 1rem; font-weight: 600; color: #334155;">Job Planning &amp; Tracking Register</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-stats" id="topbarStats"></div>
+        <div class="user-info" style="display: flex; align-items: center;">
+          <span id="userNameDisplay" style="color: var(--text);"></span>
+          <button id="logoutBtn" class="btn btn-outline" style="padding: 6px 12px; margin-left: 16px; border-color: var(--border);">
+            <svg style="width:14px;height:14px;vertical-align:middle;margin-right:6px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>Logout
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <nav class="dept-tabs" id="deptTabs"></nav>
+
+    <main class="content">
+
+      <section class="filters">
+        <div class="filter-group">
+          <label for="clientFilter">Client</label>
+          <select id="clientFilter">
+            <option value="">All clients</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="userFilter">User / Engineer</label>
+          <select id="userFilter">
+            <option value="">All users</option>
+          </select>
+        </div>
+
+        <div class="filter-group grow">
+          <label for="searchBox">Search</label>
+          <input id="searchBox" type="text" placeholder="Job No, panel name, project, client..." />
+        </div>
+
+        <div class="filter-group">
+          <label>&nbsp;</label>
+          <button id="columnsBtn" class="btn btn-outline" style="display: none;">Columns ▾</button>
+        </div>
+      </section>
+
+      <div id="columnsPanel" class="columns-panel hidden">
+        <div class="columns-panel-head">
+          <strong>Choose fields to display for this department</strong>
+          <div>
+            <button id="colSelectAll" class="link-btn">Select all</button>
+            <button id="colSelectNone" class="link-btn">Select none</button>
+            <button id="columnsClose" class="link-btn">Close</button>
+          </div>
+        </div>
+        <div id="columnsList" class="columns-list"></div>
+      </div>
+
+      <section class="table-toolbar">
+        <div class="selection-info">
+          <span id="selectionCount">0 selected</span>
+          <button id="clearSelectionBtn" class="link-btn">clear</button>
+        </div>
+        <div class="toolbar-actions">
+          <button id="newJobBtn" class="btn btn-primary" style="display: none;">+ New Job</button>
+          <button id="jobChartBtn" class="btn" style="background-color: var(--navy); color: white; display: none;">📊 Job Chart</button>
+          <button id="exportSelectedBtn" class="btn btn-primary">Export selected (XLSX)</button>
+          <button id="exportFilteredBtn" class="btn btn-outline">Export filtered view (XLSX)</button>
+        </div>
+      </section>
+
+      <section class="table-wrap">
+        <table id="jobsTable">
+          <thead>
+            <tr id="jobsTableHead"></tr>
+          </thead>
+          <tbody id="jobsTableBody">
+            <tr><td colspan="10" class="empty-state">Loading&hellip;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <div class="pagination-bar">
+        <p class="result-count" id="resultCount"></p>
+        <div class="pagination-controls">
+          <button id="prevPageBtn" class="btn btn-outline" type="button">Previous</button>
+          <span id="pageInfo"></span>
+          <button id="nextPageBtn" class="btn btn-outline" type="button">Next</button>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+
+  <div id="jobModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="modalTitle">Job detail</h2>
+        <button id="modalClose" class="link-btn">✕ Close</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="newJobModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2>New Job / Allocation</h2>
+        <button id="newJobModalClose" class="link-btn">✕ Close</button>
+      </div>
+      <div class="modal-body">
+        <form id="newJobForm">
+          <div class="form-grid" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border);">
+            <select id="njTargetDepartment" class="hidden-control" required></select>
+            <input type="hidden" id="njTargetPosition" value="">
+            <input type="hidden" id="njQty" value="1">
+            <input type="hidden" id="njDate" class="auto-date" required>
+            <div class="form-group">
+              <label for="njPanelName">Name of Panel <span class="required">*</span></label>
+              <select id="njPanelName" required>
+                <option value="">-- Select Panel --</option>
+                <option value="__new">+ Add new panel</option>
+              </select>
+              <input type="text" id="njPanelNameNew" class="hidden-control" placeholder="Enter new panel name">
+            </div>
+            <div class="form-group">
+              <label for="njJobNo">Job No. <span class="required">*</span></label>
+              <input type="text" id="njJobNo" required>
+            </div>
+            <div class="form-group">
+              <label for="njProjectName">Project Name <span class="required">*</span></label>
+              <select id="njProjectName" required>
+                <option value="">-- Select Project --</option>
+                <option value="__new">+ Add new project</option>
+              </select>
+              <input type="text" id="njProjectNameNew" class="hidden-control" placeholder="Enter new project name">
+            </div>
+            <div class="form-group">
+              <label for="njQty">Qty. <span class="required">*</span></label>
+              <input type="number" id="njQty" value="1" min="1" required>
+            </div>
+          </div>
+
+          <div id="nj-all-departments-container"></div>
+
+          <button type="submit" class="btn btn-primary" style="margin-top: 20px; width: 100%;">Create Job</button>
+        </form>
+      </div>
+    </div>
+   <script src="/js/utils.js"></script>
+  <script src="/js/app.js"></script>
+</body></script>
+</body>
+</html>

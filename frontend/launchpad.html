@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Launchpad - Swati Switchgears</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+    }
+    .launchpad-header {
+      margin-top: 60px;
+      text-align: center;
+      color: var(--text);
+    }
+    .launchpad-header h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .launchpad-header p {
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+    .cards-container {
+      display: flex;
+      gap: 30px;
+      margin-top: 50px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .card {
+      background: var(--panel);
+      width: 280px;
+      height: 200px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-decoration: none;
+      color: var(--text);
+      transition: var(--transition);
+      border: 1px solid var(--border);
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--accent);
+    }
+    .card-icon {
+      font-size: 48px;
+      margin-bottom: 20px;
+      color: var(--accent);
+    }
+    .card-title {
+      font-size: 20px;
+      font-weight: 600;
+    }
+    
+    .logout-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 10px 16px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+    .logout-btn:hover {
+      background: #f1f5f9;
+    }
+  </style>
+</head>
+<body>
+
+  <button class="logout-btn" onclick="logout()">Logout ⍈</button>
+
+  <div class="launchpad-header">
+    <h1>Welcome, Keval V Shah</h1>
+    <p>Select a portal to continue</p>
+  </div>
+
+  <div class="cards-container">
+    <a href="/index.html" class="card">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Job Dashboard</div>
+    </a>
+    
+    <a href="/charts.html" class="card">
+      <div class="card-icon">📈</div>
+      <div class="card-title">Job Charts</div>
+    </a>
+  </div>
+
+  <script>
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login.html';
+    }
+
+    // Protection
+    const user = JSON.parse(localStorage.getItem('user') || "{}");
+    if (!user || user.username !== 'keval v shah') {
+      window.location.href = '/login.html';
+    }
+  </script>
+</body>
+</html>
