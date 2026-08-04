@@ -1,0 +1,25 @@
+{
+  "name": "job-planning-backend",
+  "version": "1.0.0",
+  "description": "Backend API + database for the Job Planning & Tracking Register software",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "npx kill-port 4000 && node src/server.js",
+    "reimport": "node database/import.js",
+    "migrate:workflow": "node database/migrate-job-workflow.js",
+    "seed:accounts": "node database/seed-accounts.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.8.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "kill-port": "^2.0.1"
+  }
+}
