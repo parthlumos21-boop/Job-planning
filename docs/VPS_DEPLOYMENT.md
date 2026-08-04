@@ -12,11 +12,11 @@
 
 ```bash
 cd /var/www/job-planning
-npm run install-backend
-cp backend/.env.example backend/.env
+npm run install:all
+cp server/.env.example server/.env
 ```
 
-Edit `backend/.env` and set:
+Edit `server/.env` and set:
 
 - `MONGO_URI`
 - `JWT_SECRET`
@@ -26,7 +26,7 @@ Edit `backend/.env` and set:
 Run the workflow migration once after uploading new code:
 
 ```bash
-cd backend
+cd server
 npm run migrate:workflow
 npm run seed:accounts
 ```
@@ -42,8 +42,8 @@ The Node server serves both API routes and the frontend on `PORT`.
 ## PM2
 
 ```bash
-cd /var/www/job-planning/backend
-pm2 start src/server.js --name job-planning
+cd /var/www/job-planning/server
+pm2 start server.js --name job-planning
 pm2 save
 ```
 
