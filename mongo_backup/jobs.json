@@ -1,0 +1,66 @@
+[
+  {
+    "_id": {
+      "$oid": "6a718c07b2bb7aaf0aa9a01c"
+    },
+    "id": {
+      "$numberInt": "1"
+    },
+    "clientId": {
+      "$numberInt": "1"
+    },
+    "clientName": "Elite Electricals",
+    "srNo": {
+      "$numberInt": "1"
+    },
+    "jobNo": "45",
+    "panelName": "37KW VFD Panel",
+    "projectName": "demo",
+    "responsibleEnggName": "Hasmukh",
+    "poNo": "123",
+    "poDate": "2026-08-05",
+    "deliveryPeriod": "",
+    "deliveryDate": "2026-08-13",
+    "dataGivenToDesign": "2026-08-20",
+    "deliveryAddress": "",
+    "contactPerson": "",
+    "typeOfIndustries": "Fabrics & Textiles",
+    "incomerRating": "",
+    "typeOfPanel": "ABB Ar-tu-k",
+    "qty": {
+      "$numberInt": "1"
+    },
+    "date": "2026-08-04",
+    "ttl": "",
+    "targetDepartment": "marketing",
+    "targetPosition": "",
+    "createdBy": "swatisales",
+    "visibleToDepartments": [
+      "marketing"
+    ],
+    "selected": false,
+    "departmentStatus": {
+      "marketing": "completed",
+      "design": "pending",
+      "mechanical": "pending",
+      "purchase": "pending",
+      "production": "pending",
+      "dispatch": "pending"
+    },
+    "fields": {},
+    "engineers": {},
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785826311235"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785826311235"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  }
+]

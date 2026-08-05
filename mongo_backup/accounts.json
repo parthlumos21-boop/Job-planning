@@ -1,0 +1,510 @@
+[
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c8b"
+    },
+    "username": "kevalvshah",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345741"
+      }
+    },
+    "departments": [
+      "marketing",
+      "design",
+      "purchase",
+      "mechanical",
+      "production",
+      "dispatch"
+    ],
+    "password": "kevalvshah",
+    "role": "admin",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685877"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c8c"
+    },
+    "username": "keval",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345772"
+      }
+    },
+    "departments": [
+      "marketing",
+      "design",
+      "purchase",
+      "mechanical",
+      "production",
+      "dispatch"
+    ],
+    "password": "keval",
+    "role": "admin",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685903"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c8d"
+    },
+    "username": "keval v shah",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345777"
+      }
+    },
+    "departments": [
+      "marketing",
+      "design",
+      "purchase",
+      "mechanical",
+      "production",
+      "dispatch"
+    ],
+    "password": "keval@123",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685909"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c8e"
+    },
+    "username": "admin",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345779"
+      }
+    },
+    "departments": [
+      "marketing",
+      "design",
+      "purchase",
+      "mechanical",
+      "production",
+      "dispatch"
+    ],
+    "password": "admin",
+    "role": "admin",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685914"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c8f"
+    },
+    "username": "admin2",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345781"
+      }
+    },
+    "departments": [
+      "marketing",
+      "design",
+      "purchase",
+      "mechanical",
+      "production",
+      "dispatch"
+    ],
+    "password": "admin2",
+    "role": "admin",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685920"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c90"
+    },
+    "username": "swatisales",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345784"
+      }
+    },
+    "departments": [
+      "marketing"
+    ],
+    "password": "swatisales",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685923"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c91"
+    },
+    "username": "swatisales2",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345788"
+      }
+    },
+    "departments": [
+      "marketing"
+    ],
+    "password": "swatisales2",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685926"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c92"
+    },
+    "username": "mktadmin",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345793"
+      }
+    },
+    "departments": [
+      "marketing"
+    ],
+    "password": "mktadmin",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685930"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c93"
+    },
+    "username": "swatidesign",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345797"
+      }
+    },
+    "departments": [
+      "design"
+    ],
+    "password": "swatidesign",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685932"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c94"
+    },
+    "username": "swatidesign2",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345801"
+      }
+    },
+    "departments": [
+      "design"
+    ],
+    "password": "swatidesign2",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685935"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c95"
+    },
+    "username": "designadmin",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345809"
+      }
+    },
+    "departments": [
+      "design"
+    ],
+    "password": "designadmin",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685936"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c96"
+    },
+    "username": "mechdesign1",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345813"
+      }
+    },
+    "departments": [
+      "mechanical"
+    ],
+    "password": "mechdesign1",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685937"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c97"
+    },
+    "username": "mechdesign2",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345818"
+      }
+    },
+    "departments": [
+      "mechanical"
+    ],
+    "password": "mechdesign2",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685939"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c98"
+    },
+    "username": "machinedesign",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345825"
+      }
+    },
+    "departments": [
+      "mechanical"
+    ],
+    "password": "machinedesign",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685940"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c99"
+    },
+    "username": "swatipurchase",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345828"
+      }
+    },
+    "departments": [
+      "purchase"
+    ],
+    "password": "swatipurchase",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685941"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c9a"
+    },
+    "username": "swatipurchase2",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345833"
+      }
+    },
+    "departments": [
+      "purchase"
+    ],
+    "password": "swatipurchase2",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685942"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c9b"
+    },
+    "username": "purchaseadmin",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345835"
+      }
+    },
+    "departments": [
+      "purchase"
+    ],
+    "password": "purchaseadmin",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685944"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c9c"
+    },
+    "username": "swatiproduction",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345841"
+      }
+    },
+    "departments": [
+      "production",
+      "dispatch"
+    ],
+    "password": "swatiproduction",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685946"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c9d"
+    },
+    "username": "swatiqc",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345845"
+      }
+    },
+    "departments": [
+      "production",
+      "dispatch"
+    ],
+    "password": "swatiqc",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685949"
+      }
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a708e41b3cdfebc55386c9e"
+    },
+    "username": "prodadmin",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785761345851"
+      }
+    },
+    "departments": [
+      "production",
+      "dispatch"
+    ],
+    "password": "prodadmin",
+    "role": "user",
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906685951"
+      }
+    }
+  }
+]

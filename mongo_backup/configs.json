@@ -1,0 +1,199 @@
+[
+  {
+    "_id": {
+      "$oid": "6a72c5f6b3cdfebc55386c9f"
+    },
+    "key": "system_config",
+    "__v": {
+      "$numberInt": "0"
+    },
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678772"
+      }
+    },
+    "departments": [
+      {
+        "key": "marketing",
+        "name": "Marketing",
+        "_id": {
+          "$oid": "6a72c5f679d3c2ae15db4be2"
+        }
+      },
+      {
+        "key": "design",
+        "name": "Design- Electrical",
+        "_id": {
+          "$oid": "6a72c5f679d3c2ae15db4be3"
+        }
+      },
+      {
+        "key": "purchase",
+        "name": "Procurement",
+        "_id": {
+          "$oid": "6a72c5f679d3c2ae15db4be4"
+        }
+      },
+      {
+        "key": "mechanical",
+        "name": "Design- Mechanical",
+        "_id": {
+          "$oid": "6a72c5f679d3c2ae15db4be5"
+        }
+      },
+      {
+        "key": "production",
+        "name": "Production & QC & Dispatch",
+        "_id": {
+          "$oid": "6a72c5f679d3c2ae15db4be6"
+        }
+      }
+    ],
+    "fieldDefs": {
+      "marketing": [
+        "Type of Industries",
+        "Incomer Rating",
+        "Type of Panel",
+        "Responsible Engg. Name",
+        "Purchase Order",
+        "Purchase Order Date",
+        "Delivery Period as per P.O.",
+        "Delivery Date as per P.O.",
+        "Data Given To Design Department",
+        "Delivery Address",
+        "Contact Person & Phone Number",
+        "Transportation",
+        "Packing"
+      ],
+      "design": [
+        "Eng. BOM For Approval Sent Date",
+        "Eng. BOM For Approval Expected Date",
+        "Eng. BOM For Approval Received Date",
+        "Ele. Panel drawing Sent Date",
+        "Ele. Panel drawing Expected Date",
+        "Ele. Panel drawing Received Date",
+        "Mech. Drawing For Approval Sent Date",
+        "Mech. Drawing For Approval Expected Date",
+        "Mech. Drawing For Approval Received Date",
+        "Mech. Approval Received Date",
+        "Final Approved Date",
+        "BOM Release Date",
+        "G.A. Release Date",
+        "Drawing prepare by Name",
+        "Rev R0 BOQ Name of Person",
+        "Rev R0 BOQ START DATE",
+        "Rev R0 BOQ END DATE",
+        "Rev R1 BOQ Name of Person",
+        "Rev R1 BOQ START DATE",
+        "Rev R1 BOQ END DATE",
+        "Rev R2 BOQ Name of Person",
+        "Rev R2 BOQ START DATE",
+        "Rev R2 BOQ END DATE",
+        "Rev R3 BOQ Name of Person",
+        "Rev R3 BOQ START DATE",
+        "Rev R3 BOQ END DATE",
+        "Rev R4 BOQ Name of Person",
+        "Rev R4 BOQ START DATE",
+        "Rev R4 BOQ END DATE",
+        "Rev R5 BOQ Name of Person",
+        "Rev R5 BOQ START DATE",
+        "Rev R5 BOQ END DATE",
+        "Rev R0 CONTROL Name of Person",
+        "Rev R0 CONTROL START DATE",
+        "Rev R0 CONTROL END DATE",
+        "Rev R1 CONTROL Name of Person",
+        "Rev R1 CONTROL START DATE",
+        "Rev R1 CONTROL END DATE",
+        "Rev R2 CONTROL Name of Person",
+        "Rev R2 CONTROL START DATE",
+        "Rev R2 CONTROL END DATE",
+        "Rev R3 CONTROL Name of Person",
+        "Rev R3 CONTROL START DATE",
+        "Rev R3 CONTROL END DATE",
+        "Rev R4 CONTROL Name of Person",
+        "Rev R4 CONTROL START DATE",
+        "Rev R4 CONTROL END DATE",
+        "Rev R5 CONTROL Name of Person",
+        "Rev R5 CONTROL START DATE",
+        "Rev R5 CONTROL END DATE",
+        "Rev R0 PDF Name of Person",
+        "Rev R0 PDF",
+        "Rev R1 PDF Name of Person",
+        "Rev R1 PDF",
+        "Rev R2 PDF Name of Person",
+        "Rev R2 PDF",
+        "Rev R3 PDF Name of Person",
+        "Rev R3 PDF",
+        "Rev R4 PDF Name of Person",
+        "Rev R4 PDF",
+        "Rev R5 PDF Name of Person",
+        "Rev R5 PDF",
+        "CLIENT SUBMISSION R2 Name of Person",
+        "CLIENT SUBMISSION DATE R2",
+        "Final Approved Drawings",
+        "BOM Released",
+        "SO No. of ERP",
+        "BOM Prepare Name of Person"
+      ],
+      "purchase": [
+        "Switchgear PO Number",
+        "Switchgear Date",
+        "Misc PO Number",
+        "Misc Date"
+      ],
+      "mechanical": [
+        "Fabrication Release Date",
+        "Swati / Outsource Fabricator Name",
+        "Fabrication Prepare Engineer",
+        "Door Details Sent Date",
+        "Door Details Prepare Engineer",
+        "Execution File Date",
+        "Execution PDF Prepare Engineer",
+        "Programming Release to Punching & Laser",
+        "Punching Start Date",
+        "Punching Complete Date",
+        "Bending Start Date",
+        "Bending Complete Date",
+        "Welding Start Date",
+        "Welding Complete Date",
+        "Name of Fabricator",
+        "Name of Fabrication Engineer",
+        "Release to Painting Date",
+        "Received to Painting Date",
+        "Name of Painter",
+        "Panel Assembly Start Date",
+        "Panel Assembly Complete Date",
+        "Name of Assembler",
+        "Painting & Assembly Checked By Engineer"
+      ],
+      "production": [
+        "Responsible Job Engineer",
+        "Busbar Work Start Date",
+        "Busbar Work Complete Date",
+        "Responsible Fitter",
+        "Wiring Start Date",
+        "Wiring Complete Date",
+        "Responsible Wireman",
+        "Testing Start Date",
+        "Testing Complete Date",
+        "Testing Done By Engineer",
+        "Actual Inspection Date",
+        "Compliance / Dispatch Clearance Date",
+        "As Built Submission Date",
+        "As Built Prepared By Engineer (Production)",
+        "As Built PDF Prepared By Engineer (Design)"
+      ],
+      "dispatch": [
+        "Packing Start Date",
+        "Packing Complete Date",
+        "Name of Responsible Person Checked Before Packing",
+        "Dispatch Date"
+      ]
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678772"
+      }
+    }
+  }
+]
