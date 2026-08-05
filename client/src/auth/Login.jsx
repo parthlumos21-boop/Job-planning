@@ -21,8 +21,7 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-r from-cyan-200 via-purple-200 to-pink-200 py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
-      <div className="snow-bg"></div>
-      <div className="snow-bg-2"></div>
+
       <div className="relative z-10 max-w-md w-full space-y-8 bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-slate-200">
         <div className="flex flex-col items-center">
           <img

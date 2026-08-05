@@ -93,8 +93,7 @@ export default function Layout() {
       </aside>
       
       <main className="relative flex-1 flex flex-col h-screen overflow-hidden bg-gradient-to-r from-cyan-200 via-purple-200 to-pink-200">
-        <div className="snow-bg"></div>
-        <div className="snow-bg-2"></div>
+
         {/* Top Header */}
         <header className="relative flex justify-end items-center px-8 py-4 bg-white/80 border-b border-slate-200 shadow-sm z-10 backdrop-blur-sm">
           <button

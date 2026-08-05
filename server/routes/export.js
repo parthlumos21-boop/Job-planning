@@ -157,10 +157,17 @@ function applyCustomSheetFormat(ws, rowsCount, columnCount, isMaster = false, me
   ws["!cols"][1] = { wch: 15 };
 
   ws["!freeze"] = { xSplit: 2, ySplit: isMaster ? 3 : 7 };
-  ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: isMaster ? 2 : 6, c: 0 }, e: { r: isMaster ? 2 : 6, c: columnCount - 1 } }) };
+  // Autofitler removed as per user request
   
   if (merges.length > 0) {
     ws["!merges"] = merges;
+  }
+
+  ws["!rows"] = [];
+  ws["!rows"][2] = { hpt: 45 }; // Row 3
+  ws["!rows"][3] = { hpt: 45 }; // Row 4
+  if (!isMaster) {
+    ws["!rows"][6] = { hpt: 45 }; // Row 7 (Headers in dept sheets)
   }
 }
 
@@ -236,6 +243,7 @@ function buildWorkbook(jobs, _deps, _fields, user) {
         style.font.italic = true;
         style.font.color = { rgb: "FF555555" };
       } else if (R === 2) {
+        style.font.sz = 16;
         style.font.bold = true;
         style.font.color = { rgb: "FFFFFFFF" };
         style.alignment.horizontal = "center";
@@ -341,6 +349,7 @@ function buildWorkbook(jobs, _deps, _fields, user) {
           style.font.sz = 14; style.font.bold = true; style.alignment.horizontal = "center"; style.fill = { fgColor: { rgb: "FFEAEAEA" } };
         } else if (R >= 1 && R <= 4) {
           style.font.bold = true; style.fill = { fgColor: { rgb: "FFF2F2F2" } };
+          if (R === 2) style.font.sz = 16;
         } else if (R === 6) {
           style.font.bold = true;
           style.font.color = { rgb: "FFFFFFFF" };
