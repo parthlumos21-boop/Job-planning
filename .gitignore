@@ -12,3 +12,14 @@ Thumbs.db
 
 # PM2 logs
 *.log
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+server-py/venv/
+**/venv/
+.pytest_cache/

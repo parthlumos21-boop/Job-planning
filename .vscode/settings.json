@@ -1,6 +1,9 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/server-py/venv/Scripts/python.exe",
   "python.analysis.extraPaths": [
-    "${workspaceFolder}/server-py"
-  ]
+    "./server-py"
+  ],
+  "python.autoComplete.extraPaths": [
+    "./server-py"
+  ],
+  "python.defaultInterpreterPath": "./server-py/venv/Scripts/python.exe"
 }

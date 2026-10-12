@@ -1,0 +1,12 @@
+{
+  "include": [
+    "server-py"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "server-py/venv"
+  ],
+  "extraPaths": [
+    "server-py"
+  ]
+}
