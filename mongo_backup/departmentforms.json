@@ -1,0 +1,32 @@
+[
+  {
+    "_id": {
+      "$oid": "6a718c16b2bb7aaf0aa9a01d"
+    },
+    "jobId": {
+      "$numberInt": "1"
+    },
+    "department": "marketing",
+    "fields": {
+      "qty": {
+        "$numberInt": "1"
+      },
+      "clientName": "Dorf-Ketal Chemicals India Limited",
+      "incomerRating": ""
+    },
+    "updatedBy": "system",
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785826326146"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785838951482"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  }
+]

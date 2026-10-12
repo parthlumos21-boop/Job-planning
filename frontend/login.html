@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Job Planning & Tracking Register</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f7f6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .login-container {
+      background: white;
+      padding: 30px;
+      border-radius: 24px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+      text-align: center;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #666;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .error {
+      color: red;
+      margin-bottom: 15px;
+      text-align: center;
+      display: none;
+    }
+    .snow-bg, .snow-bg-2 {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+    .snow-bg {
+      background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="30" r="2" fill="white" opacity="0.8"/><circle cx="80" cy="120" r="2.5" fill="white" opacity="0.6"/><circle cx="150" cy="60" r="1.5" fill="white" opacity="0.9"/><circle cx="190" cy="180" r="3" fill="white" opacity="0.7"/><circle cx="40" cy="160" r="2" fill="white" opacity="0.5"/></svg>');
+      background-size: 200px 200px;
+      animation: snow 10s linear infinite;
+    }
+    .snow-bg-2 {
+      background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="3" fill="white" opacity="0.6"/><circle cx="150" cy="200" r="2" fill="white" opacity="0.8"/><circle cx="250" cy="100" r="4" fill="white" opacity="0.4"/><circle cx="100" cy="250" r="2.5" fill="white" opacity="0.7"/></svg>');
+      background-size: 300px 300px;
+      animation: snow 15s linear infinite;
+    }
+    @keyframes snow {
+      0% { background-position: 0px 0px; }
+      100% { background-position: 100px 600px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="snow-bg"></div>
+  <div class="snow-bg-2"></div>
+  <div class="login-container">
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="/assets/21.png" alt="Swati Switchgears Logo" style="max-width: 150px; border-radius: 50%;">
+    </div>
+    <h2>Login</h2>
+    <div id="error-message" class="error">Invalid username or password</div>
+    <form id="login-form">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" required>
+      </div>
+      <button type="submit">Log In</button>
+    </form>
+  </div>
+  <script src="/js/auth.js"></script>
+</body>
+</html>

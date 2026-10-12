@@ -1,0 +1,19 @@
+{
+  "name": "job-planning-system",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "cd server-py && venv\\Scripts\\python.exe run.py",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server-py && venv\\Scripts\\python.exe run.py",
+    "dev:node": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "seed:db": "cd server-py && venv\\Scripts\\python.exe ../scripts/seed_postgres.py",
+    "test:api": "cd server-py && venv\\Scripts\\python.exe ../scripts/test_api.py",
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build",
+    "deploy": "npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
+  }
+}

@@ -1,0 +1,178 @@
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Numeric, func
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from app.db.base import Base
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(String(50), default="user")
+    departments = Column(ARRAY(String), default=[])
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class Client(Base):
+    __tablename__ = "clients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(Integer, unique=True, index=True)
+    name = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(Integer, unique=True, index=True)
+    name = Column(String(255), nullable=False)
+    departments = Column(ARRAY(String), default=[])
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(Integer, unique=True, nullable=False, index=True)
+    client_id = Column(Integer, nullable=True)
+    client_name = Column(String(255), index=True)
+    sr_no = Column(Integer)
+    job_no = Column(String(100), nullable=False, index=True)
+    panel_name = Column(String(255), default="")
+    project_name = Column(String(255), default="", index=True)
+    responsible_engg_name = Column(String(255), default="")
+    po_no = Column(String(100), default="")
+    po_date = Column(String(50), default="")
+    delivery_period = Column(String(100), default="")
+    delivery_date = Column(String(50), default="")
+    data_given_to_design = Column(String(50), default="")
+    delivery_address = Column(Text, default="")
+    contact_person = Column(String(255), default="")
+    type_of_industries = Column(String(255), default="")
+    incomer_rating = Column(String(100), default="")
+    type_of_panel = Column(String(100), default="")
+    qty = Column(String(50), default="1")
+    date = Column(String(50), default="")
+    ttl = Column(String(100), default="")
+    target_department = Column(String(100), default="")
+    target_position = Column(String(100), default="")
+    createdBy = Column("created_by", String(100), default="")
+    visible_to_departments = Column(ARRAY(String), default=[])
+    selected = Column(Boolean, default=False)
+
+    # Lifecycle & Time Tracking Columns
+    lifecycle_status = Column(String(50), default="Draft", index=True)
+    planned_start_at = Column(DateTime(timezone=True), nullable=True)
+    planned_end_at = Column(DateTime(timezone=True), nullable=True)
+    estimated_duration_seconds = Column(Integer, default=0)
+    actual_start_at = Column(DateTime(timezone=True), nullable=True)
+    actual_end_at = Column(DateTime(timezone=True), nullable=True)
+    total_paused_seconds = Column(Integer, default=0)
+    pause_started_at = Column(DateTime(timezone=True), nullable=True)
+    actual_duration_seconds = Column(Integer, default=0)
+    progress_percentage = Column(Numeric(5, 2), default=0.00)
+    priority = Column(String(20), default="Normal")
+    assigned_engineer_id = Column(Integer, nullable=True)
+
+    # Worker Assignment & Handover
+    current_worker_id = Column(Integer, nullable=True, index=True)
+    current_worker_position = Column(String(100), nullable=True)
+    previous_worker_id = Column(Integer, nullable=True)
+    next_worker_id = Column(Integer, nullable=True)
+    last_handover_at = Column(DateTime(timezone=True), nullable=True)
+    handover_notes = Column(Text, nullable=True)
+
+    # JSONB columns
+    fields = Column(JSONB, default=dict)
+    engineers = Column(JSONB, default=dict)
+    department_status = Column("department_status", JSONB, default=lambda: {
+        "marketing": "completed",
+        "design": "pending",
+        "mechanical": "pending",
+        "purchase": "pending",
+        "production": "pending",
+        "dispatch": "pending"
+    })
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class JobExecutionSession(Base):
+    __tablename__ = "job_execution_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, nullable=False, index=True)
+    session_type = Column(String(20), nullable=False)  # 'WORK' or 'PAUSE'
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    duration_seconds = Column(Integer, default=0)
+    performed_by = Column(String(100), nullable=False)
+    worker_id = Column(Integer, nullable=True, index=True)
+    worker_position = Column(String(100), nullable=True)
+    pause_reason = Column(String(255), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class JobHandover(Base):
+    __tablename__ = "job_handovers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, nullable=False, index=True)
+    from_worker_id = Column(Integer, nullable=True)
+    from_worker_position = Column(String(100), nullable=True)
+    to_worker_id = Column(Integer, nullable=True, index=True)
+    to_worker_position = Column(String(100), nullable=True)
+    handover_at = Column(DateTime(timezone=True), server_default=func.now())
+    reason = Column(String(255), nullable=False)
+    notes = Column(Text, nullable=True)
+    work_completed_summary = Column(Text, nullable=True)
+    active_seconds_before_handover = Column(Integer, default=0)
+    performed_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class JobProgressHistory(Base):
+    __tablename__ = "job_progress_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, nullable=False, index=True)
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())
+    progress_percentage = Column(Numeric(5, 2), nullable=False)
+    active_duration_seconds = Column(Integer, nullable=False)
+
+    recorded_by = Column(String(100), nullable=False)
+    note = Column(String(255), nullable=True)
+
+class DepartmentAssignment(Base):
+    __tablename__ = "department_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, nullable=False)
+    department = Column(String(100), nullable=False)
+    assigned_users = Column(ARRAY(String), default=[])
+    assigned_by = Column(String(100))
+    assigned_date = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String(50), default="Pending")
+
+class DepartmentActivity(Base):
+    __tablename__ = "department_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, nullable=False)
+    department = Column(String(100), nullable=False)
+    action = Column(String(255))
+    old_value = Column(JSONB)
+    new_value = Column(JSONB)
+    updated_by = Column(String(100))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class SystemConfig(Base):
+    __tablename__ = "system_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, nullable=False)
+    departments = Column(JSONB, default=list)
+    field_defs = Column(JSONB, default=dict)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+

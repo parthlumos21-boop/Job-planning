@@ -1,0 +1,2006 @@
+[
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4be7"
+    },
+    "id": {
+      "$numberInt": "1"
+    },
+    "name": "AASIF",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678861"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678861"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4be8"
+    },
+    "id": {
+      "$numberInt": "2"
+    },
+    "name": "Abhishek sharma",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678881"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678881"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4be9"
+    },
+    "id": {
+      "$numberInt": "3"
+    },
+    "name": "Anup trivedi",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678887"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678887"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bea"
+    },
+    "id": {
+      "$numberInt": "4"
+    },
+    "name": "ATISH",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678892"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678892"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4beb"
+    },
+    "id": {
+      "$numberInt": "5"
+    },
+    "name": "Bhavesh prajapati",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678895"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678895"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bec"
+    },
+    "id": {
+      "$numberInt": "6"
+    },
+    "name": "Bhim",
+    "departments": [
+      "mechanical",
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678899"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678899"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bed"
+    },
+    "id": {
+      "$numberInt": "7"
+    },
+    "name": "chirag panchal",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678902"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678902"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bee"
+    },
+    "id": {
+      "$numberInt": "8"
+    },
+    "name": "Disant",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678906"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678906"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bef"
+    },
+    "id": {
+      "$numberInt": "9"
+    },
+    "name": "Dishant",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678909"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678909"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf0"
+    },
+    "id": {
+      "$numberInt": "10"
+    },
+    "name": "DISHANT PANCHAL",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678911"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678911"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf1"
+    },
+    "id": {
+      "$numberInt": "11"
+    },
+    "name": "Gore lal",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678915"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678915"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf2"
+    },
+    "id": {
+      "$numberInt": "12"
+    },
+    "name": "Hasmukh",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678918"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678918"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf3"
+    },
+    "id": {
+      "$numberInt": "13"
+    },
+    "name": "HITESH",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678921"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678921"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf4"
+    },
+    "id": {
+      "$numberInt": "14"
+    },
+    "name": "HKC",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678925"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678925"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf5"
+    },
+    "id": {
+      "$numberInt": "15"
+    },
+    "name": "Imtyaz",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678928"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678928"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf6"
+    },
+    "id": {
+      "$numberInt": "16"
+    },
+    "name": "Jagat Doriya",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678931"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678931"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf7"
+    },
+    "id": {
+      "$numberInt": "17"
+    },
+    "name": "JAGRUTI PARMAR",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678935"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678935"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf8"
+    },
+    "id": {
+      "$numberInt": "18"
+    },
+    "name": "JAIVIK",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678937"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678937"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bf9"
+    },
+    "id": {
+      "$numberInt": "19"
+    },
+    "name": "JANAK",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678941"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678941"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bfa"
+    },
+    "id": {
+      "$numberInt": "20"
+    },
+    "name": "Jay",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678943"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678943"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bfb"
+    },
+    "id": {
+      "$numberInt": "21"
+    },
+    "name": "JAY BRAHMANI",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678946"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678946"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bfc"
+    },
+    "id": {
+      "$numberInt": "22"
+    },
+    "name": "JAY KHODIYAR",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678951"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678951"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bfd"
+    },
+    "id": {
+      "$numberInt": "23"
+    },
+    "name": "JAY PANDYA",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678955"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678955"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bfe"
+    },
+    "id": {
+      "$numberInt": "24"
+    },
+    "name": "Jigar Patel",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678958"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678958"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4bff"
+    },
+    "id": {
+      "$numberInt": "25"
+    },
+    "name": "Jignesh",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678961"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678961"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c00"
+    },
+    "id": {
+      "$numberInt": "26"
+    },
+    "name": "Kalu",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678964"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678964"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c01"
+    },
+    "id": {
+      "$numberInt": "27"
+    },
+    "name": "KEYUR",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678967"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678967"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c02"
+    },
+    "id": {
+      "$numberInt": "28"
+    },
+    "name": "KHUNIT",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678970"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678970"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c03"
+    },
+    "id": {
+      "$numberInt": "29"
+    },
+    "name": "KINJAL",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678974"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678974"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c04"
+    },
+    "id": {
+      "$numberInt": "30"
+    },
+    "name": "KINJAL KEYUR",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678977"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678977"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c05"
+    },
+    "id": {
+      "$numberInt": "31"
+    },
+    "name": "Krunal Panel",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678980"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678980"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c06"
+    },
+    "id": {
+      "$numberInt": "32"
+    },
+    "name": "Krunal Patel",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678983"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678983"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c07"
+    },
+    "id": {
+      "$numberInt": "33"
+    },
+    "name": "Mahesh",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678986"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678986"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c08"
+    },
+    "id": {
+      "$numberInt": "34"
+    },
+    "name": "MAHETAB",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678989"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678989"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c09"
+    },
+    "id": {
+      "$numberInt": "35"
+    },
+    "name": "MEET",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678991"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678991"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c0a"
+    },
+    "id": {
+      "$numberInt": "36"
+    },
+    "name": "MIT",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678993"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678993"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c0b"
+    },
+    "id": {
+      "$numberInt": "37"
+    },
+    "name": "Mr Unnnikrishnan. K. Nair",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678995"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678995"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f679d3c2ae15db4c0c"
+    },
+    "id": {
+      "$numberInt": "38"
+    },
+    "name": "Mr. PARESH PATEL",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906678999"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906678999"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c0d"
+    },
+    "id": {
+      "$numberInt": "39"
+    },
+    "name": "Mr.Ganpatsinh Zala",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679002"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679002"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c0e"
+    },
+    "id": {
+      "$numberInt": "40"
+    },
+    "name": "Mr.Rakesh Patel",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679004"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679004"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c0f"
+    },
+    "id": {
+      "$numberInt": "41"
+    },
+    "name": "Naim Vhora",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679008"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679008"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c10"
+    },
+    "id": {
+      "$numberInt": "42"
+    },
+    "name": "NARENDAR",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679010"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679010"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c11"
+    },
+    "id": {
+      "$numberInt": "43"
+    },
+    "name": "NARENDRA",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679012"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679012"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c12"
+    },
+    "id": {
+      "$numberInt": "44"
+    },
+    "name": "NAVAL",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679016"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679016"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c13"
+    },
+    "id": {
+      "$numberInt": "45"
+    },
+    "name": "NIRMAL",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679019"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679019"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c14"
+    },
+    "id": {
+      "$numberInt": "46"
+    },
+    "name": "Nita Bhavsar",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679020"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679020"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c15"
+    },
+    "id": {
+      "$numberInt": "47"
+    },
+    "name": "Pandi ji",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679023"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679023"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c16"
+    },
+    "id": {
+      "$numberInt": "48"
+    },
+    "name": "Paresh",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679025"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679025"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c17"
+    },
+    "id": {
+      "$numberInt": "49"
+    },
+    "name": "PIYUSH GAJERA",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679027"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679027"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c18"
+    },
+    "id": {
+      "$numberInt": "50"
+    },
+    "name": "Praveen",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679030"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679030"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c19"
+    },
+    "id": {
+      "$numberInt": "51"
+    },
+    "name": "Presh",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679032"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679032"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c1a"
+    },
+    "id": {
+      "$numberInt": "52"
+    },
+    "name": "PRINCE",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679035"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679035"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c1b"
+    },
+    "id": {
+      "$numberInt": "53"
+    },
+    "name": "Rajesh Patel",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679037"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679037"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c1c"
+    },
+    "id": {
+      "$numberInt": "54"
+    },
+    "name": "RAJESHREE PARMAR",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679039"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679039"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c1d"
+    },
+    "id": {
+      "$numberInt": "55"
+    },
+    "name": "Rajveer",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679042"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679042"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c1e"
+    },
+    "id": {
+      "$numberInt": "56"
+    },
+    "name": "RAMESHBHAI",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679044"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679044"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c1f"
+    },
+    "id": {
+      "$numberInt": "57"
+    },
+    "name": "RAVI",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679048"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679048"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c20"
+    },
+    "id": {
+      "$numberInt": "58"
+    },
+    "name": "Ravinder Kalu",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679051"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679051"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c21"
+    },
+    "id": {
+      "$numberInt": "59"
+    },
+    "name": "ROHIT",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679053"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679053"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c22"
+    },
+    "id": {
+      "$numberInt": "60"
+    },
+    "name": "SACHIN",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679055"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679055"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c23"
+    },
+    "id": {
+      "$numberInt": "61"
+    },
+    "name": "SAURABH NIGAM",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679057"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679057"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c24"
+    },
+    "id": {
+      "$numberInt": "62"
+    },
+    "name": "Shailesh",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679059"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679059"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c25"
+    },
+    "id": {
+      "$numberInt": "63"
+    },
+    "name": "SHAILESH CHAUHAN",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679061"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679061"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c26"
+    },
+    "id": {
+      "$numberInt": "64"
+    },
+    "name": "Shubham pandey",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679063"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679063"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c27"
+    },
+    "id": {
+      "$numberInt": "65"
+    },
+    "name": "SSIPL",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679067"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679067"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c28"
+    },
+    "id": {
+      "$numberInt": "66"
+    },
+    "name": "Suresh",
+    "departments": [
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679069"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679069"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c29"
+    },
+    "id": {
+      "$numberInt": "67"
+    },
+    "name": "SUSHIL",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679071"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679071"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c2a"
+    },
+    "id": {
+      "$numberInt": "68"
+    },
+    "name": "Suvra jyoti chowbey",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679074"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679074"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c2b"
+    },
+    "id": {
+      "$numberInt": "69"
+    },
+    "name": "SWATI",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679075"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679075"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c2c"
+    },
+    "id": {
+      "$numberInt": "70"
+    },
+    "name": "Tajammul Solkar",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679077"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679077"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c2d"
+    },
+    "id": {
+      "$numberInt": "71"
+    },
+    "name": "Tejas",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679079"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679079"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c2e"
+    },
+    "id": {
+      "$numberInt": "72"
+    },
+    "name": "Tejash",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679082"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679082"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c2f"
+    },
+    "id": {
+      "$numberInt": "73"
+    },
+    "name": "Vaibhavi Patel",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679084"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679084"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c30"
+    },
+    "id": {
+      "$numberInt": "74"
+    },
+    "name": "VIPUL",
+    "departments": [
+      "production"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679086"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679086"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c31"
+    },
+    "id": {
+      "$numberInt": "75"
+    },
+    "name": "VIR VIJAY",
+    "departments": [
+      "design"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679088"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679088"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c32"
+    },
+    "id": {
+      "$numberInt": "76"
+    },
+    "name": "VIRVIJAY",
+    "departments": [
+      "design",
+      "mechanical"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679090"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679090"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  },
+  {
+    "_id": {
+      "$oid": "6a72c5f779d3c2ae15db4c33"
+    },
+    "id": {
+      "$numberInt": "77"
+    },
+    "name": "VK SHAH",
+    "departments": [
+      "marketing"
+    ],
+    "isActive": true,
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785906679096"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785906679096"
+      }
+    },
+    "__v": {
+      "$numberInt": "0"
+    }
+  }
+]

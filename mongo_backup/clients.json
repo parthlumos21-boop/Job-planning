@@ -1,0 +1,29 @@
+[
+  {
+    "_id": {
+      "$oid": "6a718c07b2bb7aaf0aa9a01b"
+    },
+    "id": {
+      "$numberInt": "1"
+    },
+    "name": "Elite Electricals",
+    "jobs": [
+      {
+        "$numberInt": "1"
+      }
+    ],
+    "createdAt": {
+      "$date": {
+        "$numberLong": "1785826311167"
+      }
+    },
+    "updatedAt": {
+      "$date": {
+        "$numberLong": "1785826311251"
+      }
+    },
+    "__v": {
+      "$numberInt": "1"
+    }
+  }
+]
