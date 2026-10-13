@@ -33,9 +33,11 @@ const FIELD_DEPARTMENT_MAP = {
     'AS BUILT PREPARED BY ENGINEER (PRODUCTION)',
     'AS BUILT(PDF) PREPARED BY ENGINEER (DESIGN)',
     'Drawing start Date', 'Drawing Complete Date', 'Drawign Prepare',
-    'Door and Service Plate', 'Drafting File Handover Date',
+    'Door and Service Plate', 'Door and Service Plate Prepare Engineer Name',
+    'Drafting File Handover Date',
     'DFT Prepare Engineer', 'Release to programme', 'Programme Start date',
-    'Programme End date', 'Programmer Engineer Name', 'Programming release to',
+    'Programme End date', 'Programmer Engineer Name',
+    'Programming release to punching & Laser date', 'Programming release to',
     'Puching & Laser Start', 'Puching & Laser End', 'Bending start date',
     'Bending complete', 'Welding start date', 'Welding complete',
     'Name of Fabricator', 'Name of Fabrication Engineer', 'Release to Painting',
@@ -204,6 +206,7 @@ const REQUIRED_DEPARTMENT_FIELDS = {
     { key: 'AS BUILT PREPARED BY ENGINEER (PRODUCTION)', label: 'AS BUILT PREPARED BY ENGINEER (PRODUCTION)', aliases: ['As Built Prepared By'] },
     { key: 'AS BUILT(PDF) PREPARED BY ENGINEER (DESIGN)', label: 'AS BUILT(PDF) PREPARED BY ENGINEER (DESIGN)', aliases: ['As Built (PDF) Prepared By'] },
     { key: 'Drawign Prepare', label: 'Drawign Prepare' },
+    { key: 'Door and Service Plate Prepare Engineer Name', label: 'Door & Service Plate Prepare Engineer' },
     { key: 'DFT Prepare Engineer', label: 'DPT Prepare Engineer' },
     { key: 'Programmer Engineer Name', label: 'Programmer Engineer' },
     { key: 'Name of Fabricator', label: 'Name of Fabricator' },
@@ -525,7 +528,9 @@ export default function NewJobForm() {
               <select value={selectedJobId} onChange={handleJobSelect} className={`${selectClass} ${submitAttempted && missingRequired.has('job:selectedJobId') ? 'border-red-400 ring-1 ring-red-300' : ''}`}>
                 <option value="">-- Select Job No. --</option>
                 {jobs.map(j => (
-                  <option key={j.id} value={j.id}>{j.jobNo} - {j.panelName}</option>
+                  <option key={j.id} value={j.id}>
+                    {j.jobNo} - {j.panelName} — Responsible: {j.responsibleEnggName || 'N/A'}
+                  </option>
                 ))}
               </select>
             </div>
@@ -972,7 +977,7 @@ export default function NewJobForm() {
               </div>
               
               <div><label className={labelClass}>Drawing start Date</label><input type="date" value={deptFields['Drawing start Date'] || ''} onChange={e => handleDeptChange('Drawing start Date', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Drawing Complete Date</label><input type="date" value={deptFields['Drawing Complete Date'] || ''} onChange={e => handleDeptChange('Drawing Complete Date', e.target.value)} className={inputClass} /></div>
+              <div><label className={labelClass}>Drawing Complete Date and Release to Programme</label><input type="date" value={deptFields['Drawing Complete Date'] || ''} onChange={e => handleDeptChange('Drawing Complete Date', e.target.value)} className={inputClass} /></div>
               <div>
                 <label className={requiredDeptLabelClass('Drawign Prepare')}>Drawing Prepare {requiredMark}</label>
                 <select value={deptFields['Drawign Prepare'] || ''} onChange={e => handleDeptChange('Drawign Prepare', e.target.value)} className={requiredDeptSelectClass('Drawign Prepare')}>
@@ -981,7 +986,14 @@ export default function NewJobForm() {
                 </select>
               </div>
               
-              <div><label className={labelClass}>Door and Service Plate</label><input type="date" value={deptFields['Door and Service Plate'] || ''} onChange={e => handleDeptChange('Door and Service Plate', e.target.value)} className={inputClass} /></div>
+              <div><label className={labelClass}>Door and Service Plate Programing Date</label><input type="date" value={deptFields['Door and Service Plate'] || ''} onChange={e => handleDeptChange('Door and Service Plate', e.target.value)} className={inputClass} /></div>
+              <div>
+                <label className={requiredDeptLabelClass('Door and Service Plate Prepare Engineer Name')}>Door & Service Plate Prepare Engineer {requiredMark}</label>
+                <select value={deptFields['Door and Service Plate Prepare Engineer Name'] || ''} onChange={e => handleDeptChange('Door and Service Plate Prepare Engineer Name', e.target.value)} className={requiredDeptSelectClass('Door and Service Plate Prepare Engineer Name')}>
+                  <option value="">-- Select --</option>
+                  {DEPARTMENT_USER_OPTIONS.mechanical.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
               <div><label className={labelClass}>Drafting File Handover Date</label><input type="date" value={deptFields['Drafting File Handover Date'] || ''} onChange={e => handleDeptChange('Drafting File Handover Date', e.target.value)} className={inputClass} /></div>
               <div>
                 <label className={requiredDeptLabelClass('DFT Prepare Engineer')}>DFT Prepare Engineer {requiredMark}</label>
@@ -1002,7 +1014,7 @@ export default function NewJobForm() {
                 </select>
               </div>
               
-              <div><label className={labelClass}>Programming release to</label><input type="text" value={deptFields['Programming release to'] || ''} onChange={e => handleDeptChange('Programming release to', e.target.value)} className={inputClass} /></div>
+              <div><label className={labelClass}>Programming release to punching & Laser date</label><input type="date" value={deptFields['Programming release to punching & Laser date'] || deptFields['Programming release to'] || ''} onChange={e => { handleDeptChange('Programming release to punching & Laser date', e.target.value); handleDeptChange('Programming release to', e.target.value); }} className={inputClass} /></div>
               <div><label className={labelClass}>Puching & Laser Start</label><input type="date" value={deptFields['Puching & Laser Start'] || ''} onChange={e => handleDeptChange('Puching & Laser Start', e.target.value)} className={inputClass} /></div>
               <div><label className={labelClass}>Puchnig & Laser End</label><input type="date" value={deptFields['Puching & Laser End'] || ''} onChange={e => handleDeptChange('Puching & Laser End', e.target.value)} className={inputClass} /></div>
 
@@ -1069,44 +1081,6 @@ export default function NewJobForm() {
                   {DEPARTMENT_USER_OPTIONS.mechanical.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
-              
-              <div className="col-span-full border-t border-orange-100 pt-4 mt-2">
-                <h4 className="text-sm font-bold text-orange-900 uppercase tracking-wide">Fabrication Production</h4>
-              </div>
-              <div><label className={labelClass}>Drawing start Date</label><input type="date" value={deptFields['Drawing start Date'] || ''} onChange={e => handleDeptChange('Drawing start Date', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Drawing Complete</label><input type="date" value={deptFields['Drawing Complete Date'] || ''} onChange={e => handleDeptChange('Drawing Complete Date', e.target.value)} className={inputClass} /></div>
-              <div>
-                <label className={requiredDeptLabelClass('Drawign Prepare')}>Drawign Prepare {requiredMark}</label>
-                <select value={deptFields['Drawign Prepare'] || ''} onChange={e => handleDeptChange('Drawign Prepare', e.target.value)} className={requiredDeptSelectClass('Drawign Prepare')}>
-                  <option value="">-- Select --</option>
-                  {DEPARTMENT_USER_OPTIONS.mechanical.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-              </div>
-              
-              <div><label className={labelClass}>Door and Panel Service Plate</label><input type="date" value={deptFields['Door and Service Plate'] || ''} onChange={e => handleDeptChange('Door and Service Plate', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Drafing File Handover</label><input type="date" value={deptFields['Drafting File Handover Date'] || ''} onChange={e => handleDeptChange('Drafting File Handover Date', e.target.value)} className={inputClass} /></div>
-              <div>
-                <label className={requiredDeptLabelClass('DFT Prepare Engineer')}>DPT Prepare Engineer {requiredMark}</label>
-                <select value={deptFields['DFT Prepare Engineer'] || ''} onChange={e => handleDeptChange('DFT Prepare Engineer', e.target.value)} className={requiredDeptSelectClass('DFT Prepare Engineer')}>
-                  <option value="">-- Select --</option>
-                  {DEPARTMENT_USER_OPTIONS.mechanical.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-              </div>
-              
-              <div><label className={labelClass}>Release to programme</label><input type="date" value={deptFields['Release to programme'] || ''} onChange={e => handleDeptChange('Release to programme', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Programme Start date</label><input type="date" value={deptFields['Programme Start date'] || ''} onChange={e => handleDeptChange('Programme Start date', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Programme End date</label><input type="date" value={deptFields['Programme End date'] || ''} onChange={e => handleDeptChange('Programme End date', e.target.value)} className={inputClass} /></div>
-              <div>
-                <label className={requiredDeptLabelClass('Programmer Engineer Name')}>Programmer Engineer {requiredMark}</label>
-                <select value={deptFields['Programmer Engineer Name'] || ''} onChange={e => handleDeptChange('Programmer Engineer Name', e.target.value)} className={requiredDeptSelectClass('Programmer Engineer Name')}>
-                  <option value="">-- Select --</option>
-                  {DEPARTMENT_USER_OPTIONS.mechanical.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-              </div>
-              
-              <div><label className={labelClass}>Programming release to</label><input type="text" value={deptFields['Programming release to'] || ''} onChange={e => handleDeptChange('Programming release to', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Puching & Laser Start</label><input type="date" value={deptFields['Puching & Laser Start'] || ''} onChange={e => handleDeptChange('Puching & Laser Start', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Puchnig & Laser</label><input type="date" value={deptFields['Puching & Laser End'] || ''} onChange={e => handleDeptChange('Puching & Laser End', e.target.value)} className={inputClass} /></div>
 
               <div className="col-span-full border-t border-orange-100 pt-4 mt-2">
                 <h4 className="text-sm font-bold text-orange-900 uppercase tracking-wide">Fabrication</h4>
@@ -1144,8 +1118,8 @@ export default function NewJobForm() {
                   {DEPARTMENT_USER_OPTIONS.mechanical.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
-              <div><label className={labelClass}>Panel Assembly</label><input type="date" value={deptFields['Panel Assembly Start'] || ''} onChange={e => handleDeptChange('Panel Assembly Start', e.target.value)} className={inputClass} /></div>
-              <div><label className={labelClass}>Panel Assembly</label><input type="date" value={deptFields['Panel Assembly Complete'] || ''} onChange={e => handleDeptChange('Panel Assembly Complete', e.target.value)} className={inputClass} /></div>
+              <div><label className={labelClass}>Panel Assembly Start Date</label><input type="date" value={deptFields['Panel Assembly Start'] || ''} onChange={e => handleDeptChange('Panel Assembly Start', e.target.value)} className={inputClass} /></div>
+              <div><label className={labelClass}>Panel Assembly Complete Date</label><input type="date" value={deptFields['Panel Assembly Complete'] || ''} onChange={e => handleDeptChange('Panel Assembly Complete', e.target.value)} className={inputClass} /></div>
               <div>
                 <label className={requiredDeptLabelClass('Name of Assembler')}>Name of Assembler {requiredMark}</label>
                 <select value={deptFields['Name of Assembler'] || ''} onChange={e => handleDeptChange('Name of Assembler', e.target.value)} className={requiredDeptSelectClass('Name of Assembler')}>

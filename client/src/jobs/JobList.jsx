@@ -1,13 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { FileText, Loader2, BarChart2, Search, ChevronLeft, ChevronRight, X, Download } from 'lucide-react';
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { FileText, Loader2, Search, ChevronLeft, ChevronRight, X, ExternalLink, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import ExcelTable from '../components/ExcelTable';
-import JobChart from '../reports/JobChart';
-import { buildJobProgressData, DEPARTMENT_PROGRESS } from './jobProgress';
+import { DEPARTMENT_PROGRESS } from './jobProgress';
 
 export default function JobList({ title }) {
   const { user } = useAuth();
@@ -20,7 +17,6 @@ export default function JobList({ title }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedJob, setSelectedJob] = useState(null);
-  const chartRef = useRef(null);
   
   const [currentPage, setCurrentPage] = useState(1);
   const jobsPerPage = 10;
@@ -40,37 +36,6 @@ export default function JobList({ title }) {
       }
     }
   }, [jobs]);
-
-  const handleDownloadChart = async () => {
-    if (!chartRef.current) return;
-    try {
-      const url = await toPng(chartRef.current, { pixelRatio: 2, style: { background: 'white' } });
-      const link = document.createElement('a');
-      link.download = `Job_${selectedJob?.jobNo || 'Status'}_Chart.png`;
-      link.href = url;
-      link.click();
-    } catch (err) {
-      console.error('Failed to download chart', err);
-    }
-  };
-
-  const handleDownloadChartPDF = async () => {
-    if (!chartRef.current) return;
-    try {
-      const node = chartRef.current;
-      const imgData = await toPng(node, { pixelRatio: 2, style: { background: 'white' } });
-      const pdf = new jsPDF({
-        orientation: node.offsetWidth > node.offsetHeight ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [node.offsetWidth, node.offsetHeight]
-      });
-      pdf.addImage(imgData, 'PNG', 0, 0, node.offsetWidth, node.offsetHeight);
-      pdf.save(`Job_${selectedJob?.jobNo || 'Status'}_Chart.pdf`);
-    } catch (err) {
-      console.error('Failed to download chart as PDF', err);
-      alert('Failed to download chart PDF');
-    }
-  };
 
   const fetchJobs = async () => {
     try {
@@ -208,70 +173,96 @@ export default function JobList({ title }) {
         </div>
       )}
 
-      {selectedJob && isKeval && (
-        <div className="mt-8 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-4">
+      {selectedJob && (
+        <div className="mt-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 transition-all">
+          <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-100 gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-800">Job: {selectedJob.jobNo}</h2>
-              <p className="text-sm text-slate-500">{selectedJob.projectName} | Panel: {selectedJob.panelName}</p>
+              <div className="flex items-center gap-3">
+                <span className="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold text-xs border border-blue-200/60">
+                  Job #{selectedJob.jobNo}
+                </span>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {selectedJob.projectName || 'Project Details'}
+                </h3>
+              </div>
+              <p className="text-sm text-slate-500 mt-1">
+                Panel: <span className="font-medium text-slate-700">{selectedJob.panelName || 'N/A'}</span>
+                {selectedJob.clientName && (
+                  <> • Client: <span className="font-medium text-slate-700">{selectedJob.clientName}</span></>
+                )}
+                {selectedJob.qty && (
+                  <> • Qty: <span className="font-medium text-slate-700">{selectedJob.qty}</span></>
+                )}
+              </p>
             </div>
-            <div className="flex items-center space-x-2">
-              {isKeval && (
-                <>
-                  <button
-                    onClick={handleDownloadChart}
-                    className="flex items-center space-x-1 px-3 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium text-xs rounded transition-colors"
-                    title="Download as PNG"
-                  >
-                    <Download size={14} />
-                    <span>PNG</span>
-                  </button>
-                  <button
-                    onClick={handleDownloadChartPDF}
-                    className="flex items-center space-x-1 px-3 py-1 bg-red-50 text-red-700 hover:bg-red-100 font-medium text-xs rounded transition-colors"
-                    title="Download as PDF"
-                  >
-                    <FileText size={14} />
-                    <span>PDF</span>
-                  </button>
-                </>
-              )}
+
+            <div className="flex items-center gap-3">
+              <Link
+                to={`/jobs/${selectedJob.id || selectedJob._id || selectedJob.externalId}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+              >
+                <ExternalLink size={14} />
+                <span>View Full Job</span>
+              </Link>
               <button
                 onClick={() => setSelectedJob(null)}
-                className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer ml-4 p-1"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 title="Close"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
           </div>
-          
-          <div className="bg-white p-4">
-            {isKeval && (
-              <div ref={chartRef} className="bg-white">
-                <JobChart data={buildJobProgressData(selectedJob)} />
-              </div>
-            )}
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full text-sm text-left text-slate-500">
-                <thead className="text-xs text-slate-700 uppercase bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-2">Department</th>
-                    <th className="px-4 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DEPARTMENT_PROGRESS.map(dept => (
-                    <tr key={dept.key} className="border-b border-slate-100">
-                      <td className="px-4 py-2 font-medium text-slate-900">{dept.name}</td>
-                      <td className="px-4 py-2">
-                        {(selectedJob.departmentStatus || {})[dept.key] || 'pending'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Pure Department Workflow Status */}
+          <div className="mt-5">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              Department Workflow Status
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {DEPARTMENT_PROGRESS.map((dept) => {
+                const rawStatus = (selectedJob.departmentStatus || {})[dept.key] || 'pending';
+                const status = String(rawStatus).toLowerCase();
+                const isCompleted = status === 'completed' || status === 'done';
+                const isInProgress = status === 'in progress' || status === 'in-progress' || status === 'running';
+
+                return (
+                  <div
+                    key={dept.key}
+                    className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all ${
+                      isCompleted
+                        ? 'bg-emerald-50/50 border-emerald-200/80 shadow-xs'
+                        : isInProgress
+                        ? 'bg-amber-50/50 border-amber-200/80 shadow-xs'
+                        : 'bg-slate-50/60 border-slate-200/60'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-700 leading-snug">
+                      {dept.name}
+                    </div>
+                    <div className="mt-3 flex items-center gap-1.5">
+                      {isCompleted ? (
+                        <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                      ) : isInProgress ? (
+                        <Clock size={14} className="text-amber-600 shrink-0" />
+                      ) : (
+                        <AlertCircle size={14} className="text-slate-400 shrink-0" />
+                      )}
+                      <span
+                        className={`text-[11px] font-semibold capitalize ${
+                          isCompleted
+                            ? 'text-emerald-700'
+                            : isInProgress
+                            ? 'text-amber-700'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {status}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

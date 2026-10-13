@@ -1,5 +1,7 @@
-import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Sidebar from '../components/Sidebar';
 import {
   LayoutDashboard, PlusCircle, Briefcase,
   FileBarChart, User, LogOut, Activity, FileText
@@ -19,6 +21,18 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem('job_planning_sidebar_collapsed') === 'true';
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('job_planning_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
 
   const handleLogout = () => {
     logout();
@@ -51,40 +65,14 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0 z-20">
-        <div className="p-4 bg-slate-950 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <img
-              src="/21.png"
-              alt="Swati Switchgears logo"
-              className="h-20 w-auto object-contain drop-shadow-sm"
-            />
-            <div>
-              <div className="text-[15px] font-bold text-slate-300 leading-tight">Job Planning System</div>
-            </div>
-          </div>
-        </div>
-        <div className="p-4 border-b border-slate-800">
-          <div className="font-semibold text-blue-400 text-lg">{deptName}</div>
-          <div className="text-slate-400 text-base mt-0.5">{user?.username}</div>
-        </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {navItems.filter(item => item.show !== false).map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive(item.to)
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </Link>
-          ))}
-        </nav>
-      </aside>
+      <Sidebar
+        user={user}
+        deptName={deptName}
+        navItems={navItems}
+        isActive={isActive}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={toggleCollapse}
+      />
       
       <main className="relative flex-1 flex flex-col h-screen overflow-hidden bg-gradient-to-r from-cyan-200 via-purple-200 to-pink-200">
 

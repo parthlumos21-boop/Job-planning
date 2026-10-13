@@ -819,65 +819,69 @@ export default function KevalDashboard() {
       {/* ========================================================================= */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         {/* Table Controls */}
-        <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-50/50">
+        <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gradient-to-r from-slate-50 via-white to-slate-50/60">
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-900">Live Active Jobs & Handover Station</h2>
-              <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">Live Active Jobs & Handover Station</h2>
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 text-xs font-bold border border-blue-200/60">
                 {filteredJobs.length} {filteredJobs.length === 1 ? 'Job' : 'Jobs'}
               </span>
             </div>
-            <p className="text-slate-500 text-xs mt-0.5">
+            <p className="text-slate-500 text-xs mt-0.5 flex items-center gap-1.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               1-second live ticking timers, worker accountability badges & inline shift handover modal
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Search Input */}
-            <div className="relative min-w-[220px]">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search job, panel, worker..."
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
+          <div className="flex items-center gap-3">
             {/* Quick KPI filter badge if active */}
             {activeKpiFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 shadow-2xs">
                 <span>Filter: {activeKpiFilter}</span>
-                <button onClick={() => setActiveKpiFilter('all')} className="hover:text-blue-900">
+                <button onClick={() => setActiveKpiFilter('all')} className="hover:text-blue-900 cursor-pointer" title="Reset filter">
                   <X size={12} />
                 </button>
               </span>
             )}
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+              <span>Real-Time Sync</span>
+            </div>
           </div>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100/70 text-slate-600 font-semibold border-b border-slate-200/80 uppercase tracking-wider text-[11px]">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-3 px-4">Job ID & Panel</th>
-                <th className="py-3 px-3">Priority</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-4">Current Worker & Position</th>
-                <th className="py-3 px-3">Prev / Next Assignee</th>
-                <th className="py-3 px-4 font-mono">Live Elapsed Time</th>
-                <th className="py-3 px-4">Progress / Budget</th>
-                <th className="py-3 px-4 text-center">Handover</th>
-                <th className="py-3 px-4 text-right">Execution Controls</th>
+                <th className="py-3.5 px-4 w-[240px]">Job ID & Panel</th>
+                <th className="py-3.5 px-3 w-[100px]">Priority</th>
+                <th className="py-3.5 px-3 w-[120px]">Status</th>
+                <th className="py-3.5 px-4 w-[180px]">Current Worker & Position</th>
+                <th className="py-3.5 px-3 w-[160px]">Prev / Next Assignee</th>
+                <th className="py-3.5 px-4 font-mono w-[140px]">Live Elapsed Time</th>
+                <th className="py-3.5 px-4 w-[140px]">Progress / Budget</th>
+                <th className="py-3.5 px-4 text-center w-[170px]">Handover</th>
+                <th className="py-3.5 px-4 text-right w-[160px]">Execution Controls</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-normal">
+            <tbody className="divide-y divide-slate-100 font-normal bg-white">
               {filteredJobs.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-8 text-center text-slate-400">
-                    No jobs matching your filter or search query.
+                  <td colSpan="9" className="py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Clock size={24} className="text-slate-300" />
+                      <p className="font-medium text-slate-500">No jobs currently matching your active filter.</p>
+                      {activeKpiFilter !== 'all' && (
+                        <button
+                          onClick={() => setActiveKpiFilter('all')}
+                          className="mt-1 text-xs text-blue-600 hover:text-blue-700 font-semibold underline cursor-pointer"
+                        >
+                          Clear KPI filter
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -896,106 +900,114 @@ export default function KevalDashboard() {
                   return (
                     <tr
                       key={j.id}
-                      className={`hover:bg-blue-50/40 transition-colors ${
-                        isSelected ? 'bg-blue-50/60 font-medium' : ''
+                      className={`hover:bg-slate-50/80 transition-colors ${
+                        isSelected ? 'bg-blue-50/50 ring-1 ring-inset ring-blue-200' : ''
                       }`}
                     >
-                      {/* Job ID & Panel */}
-                      <td className="py-3.5 px-4">
+                      {/* 1. Job ID & Panel */}
+                      <td className="py-3.5 px-4 align-top">
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setSelectedJobId(j.id)}
-                            className="font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer text-xs"
+                            className="font-bold text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 cursor-pointer transition-colors"
                             title="Focus in Timeline Chart"
                           >
-                            <span>{j.jobNo}</span>
-                            <Eye size={12} className="opacity-60" />
+                            <span>#{j.jobNo}</span>
+                            <Eye size={12} className="opacity-70" />
                           </button>
                         </div>
-                        <div className="text-slate-800 font-medium truncate max-w-[180px] mt-0.5">
+                        <div className="text-slate-900 font-bold text-xs mt-1.5 leading-snug">
                           {j.panelName || 'Industrial Panel'}
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate max-w-[180px]">
+                        <div className="text-[11px] text-slate-500 font-medium mt-0.5">
                           {j.clientName || 'General Client'}
                         </div>
                       </td>
 
-                      {/* Priority */}
-                      <td className="py-3.5 px-3">
+                      {/* 2. Priority */}
+                      <td className="py-3.5 px-3 align-top">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
                             j.priority === 'Urgent'
-                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
                               : j.priority === 'High'
-                              ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                              : 'bg-slate-100 text-slate-700'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200/60'
                           }`}
                         >
+                          {j.priority === 'Urgent' && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping" />}
                           {j.priority || 'Normal'}
                         </span>
                       </td>
 
-                      {/* Status */}
-                      <td className="py-3.5 px-3">
+                      {/* 3. Status */}
+                      <td className="py-3.5 px-3 align-top">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
                             isRunning
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : isPaused
-                              ? 'bg-amber-100 text-amber-800'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
                               : isCompleted
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-slate-100 text-slate-700'
+                              ? 'bg-blue-50 text-blue-800 border-blue-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
                           }`}
                         >
                           {isRunning && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />}
-                          {j.status}
+                          {isPaused && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
+                          {isCompleted && <CheckCircle2 size={12} className="text-blue-600" />}
+                          {isDraft && <Clock size={12} className="text-slate-500" />}
+                          <span>{j.status}</span>
                         </span>
                       </td>
 
-                      {/* Current Worker & Position */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                          <UserCheck size={14} className="text-blue-600" />
-                          <span>{j.currentWorkerName || j.assignedEngineer || 'Unassigned'}</span>
+                      {/* 4. Current Worker & Position */}
+                      <td className="py-3.5 px-4 align-top">
+                        <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <UserCheck size={14} className="text-blue-600 shrink-0" />
+                          <span className="truncate max-w-[150px]">{j.currentWorkerName || j.assignedEngineer || 'Unassigned'}</span>
                         </div>
-                        <div className="text-[11px] text-blue-700 font-medium mt-0.5">
-                          {j.currentWorkerPosition || 'Operations Engineer'}
-                        </div>
-                      </td>
-
-                      {/* Prev / Next Assignee */}
-                      <td className="py-3.5 px-3">
-                        <div className="text-[11px] text-slate-500">
-                          <span className="text-slate-400">Prev:</span> {j.previousWorkerName || '—'}
-                        </div>
-                        <div className="text-[11px] text-slate-700 font-medium mt-0.5">
-                          <span className="text-slate-400">Next:</span> {j.nextWorkerName || 'Not Set'}
+                        <div className="inline-flex items-center text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 rounded-md mt-1">
+                          {j.currentWorkerPosition || 'Engineer'}
                         </div>
                       </td>
 
-                      {/* Live Elapsed Time (1-Second Ticking!) */}
-                      <td className="py-3.5 px-4 font-mono font-bold">
+                      {/* 5. Prev / Next Assignee */}
+                      <td className="py-3.5 px-3 align-top">
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                          <span className="text-slate-400 font-medium">Prev:</span>
+                          <span className="font-medium text-slate-600">{j.previousWorkerName || '—'}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-700 font-semibold mt-1 flex items-center gap-1">
+                          <span className="text-slate-400 font-medium">Next:</span>
+                          <span className={j.nextWorkerName && j.nextWorkerName !== 'Not yet assigned' ? 'text-indigo-700' : 'text-slate-400'}>
+                            {j.nextWorkerName || 'Not yet assigned'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 6. Live Elapsed Time */}
+                      <td className="py-3.5 px-4 align-top font-mono font-bold">
                         <div className="flex items-center gap-1.5">
                           <Clock size={14} className={isRunning ? 'text-emerald-600 animate-spin-slow' : 'text-slate-400'} />
-                          <span className={`text-sm ${isRunning ? 'text-emerald-700' : isPaused ? 'text-amber-700' : 'text-slate-800'}`}>
+                          <span className={`text-sm font-extrabold tracking-tight ${isRunning ? 'text-emerald-700' : isPaused ? 'text-amber-700' : 'text-slate-800'}`}>
                             {formatTime(elapsedSeconds)}
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
+                        <div className="text-[10px] text-slate-400 font-sans mt-0.5">
                           Est: {(estSeconds / 3600).toFixed(1)}h
                         </div>
                       </td>
 
-                      {/* Progress / Budget */}
-                      <td className="py-3.5 px-4 min-w-[130px]">
-                        <div className="flex justify-between items-center text-[11px] font-semibold mb-1">
-                          <span className={isOverrun ? 'text-rose-600 font-bold' : 'text-slate-600'}>
+                      {/* 7. Progress / Budget */}
+                      <td className="py-3.5 px-4 align-top min-w-[130px]">
+                        <div className="flex justify-between items-center text-[11px] font-bold mb-1">
+                          <span className={isOverrun ? 'text-rose-600' : 'text-slate-700'}>
                             {budgetPercent}% used
                           </span>
-                          {isOverrun && <span className="text-[10px] text-rose-500 font-bold">OVERRUN</span>}
+                          {isOverrun && <span className="text-[10px] text-rose-500 font-bold px-1.5 py-0.2 rounded bg-rose-50 border border-rose-200">OVERRUN</span>}
                         </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
                               isOverrun ? 'bg-rose-500' : budgetPercent > 80 ? 'bg-amber-500' : 'bg-emerald-500'
@@ -1003,14 +1015,17 @@ export default function KevalDashboard() {
                             style={{ width: `${Math.min(100, budgetPercent)}%` }}
                           />
                         </div>
+                        <div className="text-[10px] text-slate-400 font-medium mt-1">
+                          {j.progressPercentage ?? 0}% completed
+                        </div>
                       </td>
 
-                      {/* Handover & Quick Actions */}
-                      <td className="py-3.5 px-4 text-center">
+                      {/* 8. Handover & Quick Actions */}
+                      <td className="py-3.5 px-4 align-top text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={() => openHandoverModal(j)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold border border-amber-200 transition-all cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-300/80 shadow-2xs transition-all cursor-pointer"
                             title="Transfer work to another engineer or shift"
                           >
                             <ArrowRightLeft size={13} />
@@ -1021,7 +1036,7 @@ export default function KevalDashboard() {
                               setProgressModalJob(j);
                               setProgressModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 transition-all cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold border border-indigo-300/80 shadow-2xs transition-all cursor-pointer"
                             title="Record progress percentage and units"
                           >
                             <Activity size={13} />
@@ -1032,7 +1047,7 @@ export default function KevalDashboard() {
                               setHistoryJobId(j.id);
                               setHistoryDrawerOpen(true);
                             }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 transition-all cursor-pointer"
+                            className="inline-flex items-center p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 shadow-2xs transition-all cursor-pointer"
                             title="View chronological audit history"
                           >
                             <Clock size={13} />
@@ -1040,14 +1055,14 @@ export default function KevalDashboard() {
                         </div>
                       </td>
 
-                      {/* Execution Controls */}
-                      <td className="py-3.5 px-4 text-right">
+                      {/* 9. Execution Controls */}
+                      <td className="py-3.5 px-4 align-top text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {isDraft && (
                             <button
                               onClick={() => handleStart(j.id)}
                               disabled={actionLoading === `start-${j.id}`}
-                              className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-1 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                             >
                               <Play size={12} fill="currentColor" />
                               <span>Start</span>
@@ -1059,7 +1074,7 @@ export default function KevalDashboard() {
                               <button
                                 onClick={() => openPauseModal(j.id)}
                                 disabled={actionLoading === `pause-${j.id}`}
-                                className="px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-white font-medium flex items-center gap-1 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                               >
                                 <Pause size={12} fill="currentColor" />
                                 <span>Pause</span>
@@ -1067,7 +1082,7 @@ export default function KevalDashboard() {
                               <button
                                 onClick={() => handleComplete(j.id)}
                                 disabled={actionLoading === `complete-${j.id}`}
-                                className="px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-1 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                               >
                                 <CheckCircle2 size={12} />
                                 <span>Finish</span>
@@ -1080,7 +1095,7 @@ export default function KevalDashboard() {
                               <button
                                 onClick={() => handleResume(j.id)}
                                 disabled={actionLoading === `resume-${j.id}`}
-                                className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-1 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                               >
                                 <Play size={12} fill="currentColor" />
                                 <span>Resume</span>
@@ -1088,7 +1103,7 @@ export default function KevalDashboard() {
                               <button
                                 onClick={() => handleComplete(j.id)}
                                 disabled={actionLoading === `complete-${j.id}`}
-                                className="px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-1 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                               >
                                 <CheckCircle2 size={12} />
                                 <span>Finish</span>
@@ -1097,7 +1112,7 @@ export default function KevalDashboard() {
                           )}
 
                           {isCompleted && (
-                            <span className="text-[11px] text-slate-400 font-medium">Archived</span>
+                            <span className="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-50 border border-slate-200 rounded-md">Archived</span>
                           )}
                         </div>
                       </td>

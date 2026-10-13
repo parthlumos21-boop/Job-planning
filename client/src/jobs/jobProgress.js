@@ -95,13 +95,14 @@ const DEPARTMENT_PROGRESS = [
       ['Drawing Complete Date', 'Drawing Complete Date', 'Mechanical Drawing Register'],
       ['Drawign Prepare', 'Drawign Prepare', 'Mechanical Drawing Register'],
       ['Door and Service Plate', 'Door and Service Plate', 'Door & Service Plate Register'],
+      ['Door and Service Plate Prepare Engineer Name', 'Door and Service Plate Prepare Engineer Name', 'Door & Service Plate Register'],
       ['Drafting File Handover Date', 'Drafting File Handover Date', 'Drafting Register'],
       ['DFT Prepare Engineer', 'DFT Prepare Engineer', 'Drafting Register'],
       ['Release to programme', 'Release to programme', 'Programme Release Register'],
       ['Programme Start date', 'Programme Start date', 'Programming Register'],
       ['Programme End date', 'Programme End date', 'Programming Register'],
       ['Programmer Engineer Name', 'Programmer Engineer Name', 'Programming Register'],
-      ['Programming release to', 'Programming release to', 'Programming Register'],
+      ['Programming release to punching & Laser date', 'Programming release to', 'Programming Register'],
       ['Puching & Laser Start', 'Puching & Laser Start', 'Programming Register'],
       ['Puching & Laser End', 'Puching & Laser End', 'Programming Register'],
       ['Fabrication Release Date', 'Fabrication Release Date', 'Fabrication Release Register'],
@@ -135,11 +136,10 @@ const DEPARTMENT_PROGRESS = [
     name: 'Purchase',
     color: '#86EFAC', // Green
     fields: [
-      ['Expected Date of Handover (Material)'],
-      ['Actual Date of Handover (Material)'],
-      ['Purchase Target Date'],
-      ['Material Available Date'],
-      ['Responsible Engineer For Procurement (Name)']
+      ['Switchgear PO Number', 'Switchgears PO No.', 'Purchase Register'],
+      ['Switchgear Date', 'Switchgear Date', 'Purchase Register'],
+      ['Misc PO Number', 'Misc PO No.', 'Purchase Register'],
+      ['Misc Date', 'Misc Date', 'Purchase Register']
     ]
   },
   {
