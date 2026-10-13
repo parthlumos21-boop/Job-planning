@@ -38,8 +38,8 @@ async def get_analytics_kpis(
     today_date = now.date()
 
     for j in jobs:
-        est = j.estimated_duration_seconds or 0
-        act = j.actual_duration_seconds or 0
+        est = int(getattr(j, "estimated_duration_seconds", 0) or 0)
+        act = int(getattr(j, "actual_duration_seconds", 0) or 0)
         total_planned_sec += est
 
         if j.lifecycle_status == "Running":
@@ -49,7 +49,8 @@ async def get_analytics_kpis(
                 active_worker_ids.add(j.responsible_engg_name)
 
             if j.actual_start_at:
-                act = max(0, int((now - j.actual_start_at).total_seconds()) - (j.total_paused_seconds or 0))
+                paused_sec = int(getattr(j, "total_paused_seconds", 0) or 0)
+                act = max(0, int((now - j.actual_start_at).total_seconds()) - paused_sec)
 
         total_active_sec += act
 
@@ -65,7 +66,7 @@ async def get_analytics_kpis(
             overdue += 1
 
         # Jobs at risk check (effort > 85% of budget while not completed, or progress < 70% with high effort)
-        prog = float(j.progress_percentage or 0.0)
+        prog = float(getattr(j, "progress_percentage", 0.0) or 0.0)
         if j.lifecycle_status not in ["Completed", "Draft"] and est > 0:
             if (act > 0.85 * est and prog < 70.0) or (act > est):
                 jobs_at_risk += 1
@@ -106,10 +107,11 @@ async def get_planned_vs_actual(
 
     data = []
     for j in jobs:
-        est_sec = j.estimated_duration_seconds or 0
-        act_sec = j.actual_duration_seconds or 0
+        est_sec = int(getattr(j, "estimated_duration_seconds", 0) or 0)
+        act_sec = int(getattr(j, "actual_duration_seconds", 0) or 0)
         if j.lifecycle_status == "Running" and j.actual_start_at:
-            act_sec = max(0, int((now - j.actual_start_at).total_seconds()) - (j.total_paused_seconds or 0))
+            paused_sec = int(getattr(j, "total_paused_seconds", 0) or 0)
+            act_sec = max(0, int((now - j.actual_start_at).total_seconds()) - paused_sec)
 
         est_hours = round(est_sec / 3600.0, 1) if est_sec > 0 else 8.0
         act_hours = round(act_sec / 3600.0, 1) if act_sec > 0 else (6.5 if j.lifecycle_status == "Completed" else 4.0)
@@ -139,11 +141,12 @@ async def get_bottlenecks(
 
     data = []
     for j in jobs:
-        total_pause_hrs = round((j.total_paused_seconds or 0) / 3600.0, 1)
-        est_sec = j.estimated_duration_seconds or 0
-        act_sec = j.actual_duration_seconds or 0
+        paused_sec = int(getattr(j, "total_paused_seconds", 0) or 0)
+        total_pause_hrs = round(paused_sec / 3600.0, 1)
+        est_sec = int(getattr(j, "estimated_duration_seconds", 0) or 0)
+        act_sec = int(getattr(j, "actual_duration_seconds", 0) or 0)
         if j.lifecycle_status == "Running" and j.actual_start_at:
-            act_sec = max(0, int((now - j.actual_start_at).total_seconds()) - (j.total_paused_seconds or 0))
+            act_sec = max(0, int((now - j.actual_start_at).total_seconds()) - paused_sec)
 
         overrun_hrs = round(max(0, act_sec - est_sec) / 3600.0, 1) if est_sec > 0 else 0.0
         active_hrs = round(act_sec / 3600.0, 1)
@@ -170,14 +173,16 @@ async def get_performance_rankings(
 
     rankings = []
     for j in jobs:
-        dur_hrs = round((j.actual_duration_seconds or 0) / 3600.0, 1)
+        act_sec = int(getattr(j, "actual_duration_seconds", 0) or 0)
+        est_sec = int(getattr(j, "estimated_duration_seconds", 0) or 28800)
+        dur_hrs = round(act_sec / 3600.0, 1)
         if dur_hrs == 0:
-            dur_hrs = round((j.estimated_duration_seconds or 28800) / 3600.0, 1)
+            dur_hrs = round(est_sec / 3600.0, 1)
         rankings.append({
             "jobNo": j.job_no or f"#{j.external_id}",
             "panelName": (j.panel_name or "Panel")[:16],
             "durationHours": dur_hrs,
-            "efficiencyPercent": min(100, int(((j.estimated_duration_seconds or 28800) / max(dur_hrs * 3600, 1)) * 100))
+            "efficiencyPercent": min(100, int((est_sec / max(dur_hrs * 3600, 1)) * 100))
         })
 
     rankings.sort(key=lambda x: x["durationHours"])
@@ -209,27 +214,34 @@ async def get_department_workload(
     res = await db.execute(stmt)
     jobs = res.scalars().all()
 
-    dept_stats = {
-        "marketing": {"name": "Marketing", "active": 0, "paused": 0, "scheduled": 0, "completed": 0},
-        "design": {"name": "Design", "active": 0, "paused": 0, "scheduled": 0, "completed": 0},
-        "mechanical": {"name": "Mechanical", "active": 0, "paused": 0, "scheduled": 0, "completed": 0},
-        "purchase": {"name": "Procurement", "active": 0, "paused": 0, "scheduled": 0, "completed": 0},
-        "production": {"name": "Production & QC", "active": 0, "paused": 0, "scheduled": 0, "completed": 0},
+    dept_names = {
+        "marketing": "Marketing",
+        "design": "Design",
+        "mechanical": "Mechanical",
+        "purchase": "Procurement",
+        "production": "Production & QC",
+    }
+    counts: dict[str, dict[str, int]] = {
+        k: {"active": 0, "paused": 0, "scheduled": 0, "completed": 0}
+        for k in dept_names
     }
 
     for j in jobs:
-        dept = j.target_department if j.target_department in dept_stats else "production"
+        dept = j.target_department if j.target_department in counts else "production"
         status = j.lifecycle_status or "Draft"
         if status == "Running":
-            dept_stats[dept]["active"] += 1
+            counts[dept]["active"] += 1
         elif status == "Paused":
-            dept_stats[dept]["paused"] += 1
+            counts[dept]["paused"] += 1
         elif status == "Completed":
-            dept_stats[dept]["completed"] += 1
+            counts[dept]["completed"] += 1
         else:
-            dept_stats[dept]["scheduled"] += 1
+            counts[dept]["scheduled"] += 1
 
-    return list(dept_stats.values())
+    return [
+        {"name": dept_names[k], **counts[k]}
+        for k in dept_names
+    ]
 
 # GET /api/job-analytics/timeline (Admin Only)
 @router.get("/timeline")

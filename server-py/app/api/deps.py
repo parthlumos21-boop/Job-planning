@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
@@ -8,14 +8,15 @@ from app.schemas import UserPayload
 security_bearer = HTTPBearer(auto_error=False)
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security_bearer)
 ) -> UserPayload:
-    if not credentials:
+    token = credentials.credentials if credentials else request.query_params.get("token")
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authorization token"
         )
-    token = credentials.credentials
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(

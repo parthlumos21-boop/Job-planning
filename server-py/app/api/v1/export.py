@@ -1,16 +1,24 @@
 import io
+from typing import TypedDict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 from app.db.session import get_db
 from app.api.deps import get_current_user
 from app.models import Job
 from app.schemas import UserPayload
 
 router = APIRouter(prefix="/export", tags=["Export"])
+
+class DeptExportConfig(TypedDict):
+    key: str
+    title: str
+    color: str
+    headers: list[str]
 
 def get_field_val(fields: dict | None, *candidate_keys) -> str:
     """Helper to safely extract field values matching exact or normalized keys."""
@@ -32,7 +40,7 @@ def get_field_val(fields: dict | None, *candidate_keys) -> str:
             return norm_map[norm_key]
     return ""
 
-DEPT_CONFIGS = [
+DEPT_CONFIGS: list[DeptExportConfig] = [
     {
         "key": "marketing",
         "title": "Marketing Register",
@@ -155,15 +163,16 @@ async def export_excel(
         if id_list:
             stmt = stmt.where(Job.external_id.in_(id_list))
 
+    if selectedOnly == "true":
+        stmt = stmt.where(Job.selected.is_(True))
+
     res = await db.execute(stmt)
     jobs = list(res.scalars().all())
 
-    if selectedOnly == "true":
-        jobs = [j for j in jobs if j.selected]
-
     wb = openpyxl.Workbook()
     # Remove default sheet
-    wb.remove(wb.active)
+    if wb.active is not None:
+        wb.remove(wb.active)
 
     depts_to_export = [d for d in DEPT_CONFIGS if not department or d["key"] == department]
     if not depts_to_export:
@@ -192,13 +201,20 @@ async def export_excel(
 
         # Write Data Rows
         for row_idx, j in enumerate(jobs, start=1):
-            fields_all = j.fields or {}
-            df = fields_all.get(dept_key, {})
+            raw_fields = getattr(j, "fields", None)
+            fields_all: dict[str, Any] = dict(raw_fields) if isinstance(raw_fields, dict) else {}
+            raw_dept = fields_all.get(dept_key)
+            df: dict[str, Any] = dict(raw_dept) if isinstance(raw_dept, dict) else {}
             # Also fallback to full fields in case keys were flattened
-            dept_fields = {**fields_all, **df}
-            mkt_fields = {**fields_all, **(fields_all.get("marketing", {}))}
+            dept_fields: dict[str, Any] = {**fields_all, **df}
 
-            status_val = (j.department_status or {}).get(dept_key, "pending")
+            raw_mkt = fields_all.get("marketing")
+            mkt_df: dict[str, Any] = dict(raw_mkt) if isinstance(raw_mkt, dict) else {}
+            mkt_fields: dict[str, Any] = {**fields_all, **mkt_df}
+
+            raw_status = getattr(j, "department_status", None)
+            status_map: dict[str, Any] = dict(raw_status) if isinstance(raw_status, dict) else {}
+            status_val = status_map.get(dept_key, "pending")
             status_text = status_val.capitalize() if isinstance(status_val, str) else "Pending"
 
             if dept_key == "marketing":
@@ -409,7 +425,7 @@ async def export_excel(
         # Auto-adjust column widths
         for col in ws.columns:
             max_len = max(len(str(cell.value or "")) for cell in col)
-            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            col_letter = get_column_letter(col[0].column)
             ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
     # Save to memory buffer

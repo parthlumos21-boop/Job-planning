@@ -53,8 +53,11 @@ class JobScheduleRequest(BaseModel):
     priority: Optional[str] = "Normal"
 
 class JobPauseRequest(BaseModel):
-    reason: str = "Break"
+    reason: str = "Material unavailable"
+    category: Optional[str] = None
     notes: Optional[str] = None
+    detailed_reason: Optional[str] = None
+    expected_resume_at: Optional[str] = None
 
 class JobResumeRequest(BaseModel):
     notes: Optional[str] = None
@@ -63,10 +66,23 @@ class JobCompleteRequest(BaseModel):
     notes: Optional[str] = None
 
 class JobHandoverRequest(BaseModel):
-    to_worker_id: int
+    to_worker_id: Optional[int] = None
+    toWorkerId: Optional[int] = None
+    to_worker_name: Optional[str] = None
+    toWorker: Optional[str] = None
     to_worker_position: Optional[str] = "Engineer"
+    toPosition: Optional[str] = None
     reason: str = "Shift Change"
     notes: Optional[str] = None
+    workCompletedSummary: Optional[str] = None
+    work_completed_summary: Optional[str] = None
     action: Optional[str] = "RUNNING"  # "RUNNING" or "PAUSED"
+    keepRunning: Optional[bool] = None
+
+class JobProgressUpdateRequest(BaseModel):
+    progress_percentage: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    completed_work_units: Optional[int] = None
+    target_work_units: Optional[int] = None
+    note: Optional[str] = None
 
 

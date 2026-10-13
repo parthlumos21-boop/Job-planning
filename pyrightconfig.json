@@ -3,8 +3,7 @@
     "server-py"
   ],
   "exclude": [
-    "**/node_modules",
-    "server-py/venv"
+    "**/node_modules"
   ],
   "extraPaths": [
     "server-py"

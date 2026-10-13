@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +8,8 @@ from app.api.deps import get_current_user, require_admin
 from app.models import Job, JobExecutionSession, JobProgressHistory, JobHandover, User
 from app.schemas import (
     UserPayload, JobScheduleRequest, JobPauseRequest,
-    JobResumeRequest, JobCompleteRequest, JobHandoverRequest
+    JobResumeRequest, JobCompleteRequest, JobHandoverRequest,
+    JobProgressUpdateRequest
 )
 from app.core.events import broadcaster
 
@@ -70,6 +72,17 @@ async def schedule_job(
         "estimated_duration_seconds": job.estimated_duration_seconds
     }
 
+VALID_PAUSE_CATEGORIES = [
+    "Material unavailable",
+    "Waiting for approval",
+    "Machine breakdown",
+    "Technical issue",
+    "Employee unavailable",
+    "Customer dependency",
+    "Power outage",
+    "Other"
+]
+
 # POST /api/jobs/{id}/start
 @router.post("/{id}/start")
 async def start_job(
@@ -83,42 +96,62 @@ async def start_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.lifecycle_status == "Running":
-        return {"ok": True, "message": "Job is already running", "status": "Running"}
+    if job.lifecycle_status in ["In Progress", "Running"]:
+        return {"ok": True, "message": "Job is already running", "status": "In Progress"}
 
     now = datetime.now(timezone.utc)
     if not job.actual_start_at:
         job.actual_start_at = now
 
-    job.lifecycle_status = "Running"
+    job.lifecycle_status = "In Progress"
     job.pause_started_at = None
 
-    # Log work session
+    # Close any accidental open sessions
+    c_stmt = select(JobExecutionSession).where(
+        JobExecutionSession.job_id == job.id,
+        JobExecutionSession.ended_at.is_(None)
+    )
+    c_res = await db.execute(c_stmt)
+    for cs in c_res.scalars().all():
+        cs.ended_at = now
+        cs.duration_seconds = max(0, int((now - cs.started_at).total_seconds()))
+
     session = JobExecutionSession(
         job_id=job.id,
         session_type="WORK",
         started_at=now,
         performed_by=user.username,
-        notes="Started by Admin"
+        worker_id=job.current_worker_id,
+        worker_position=job.current_worker_position or "Engineer",
+        notes="Started by User"
     )
     db.add(session)
 
     await db.commit()
     await db.refresh(job)
 
-    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+    # Terminal Process Log
+    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] START    | Job #{job.external_id} ({job.job_no}) started by '{user.username}'", flush=True)
+
+    payload = {
+        "event": "job_started",
         "job_id": job.external_id,
-        "status": "Running",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "status": "In Progress",
         "action": "STARTED",
         "actual_start_at": job.actual_start_at.isoformat(),
+        "startedAt": now.isoformat(),
         "total_paused_seconds": job.total_paused_seconds or 0,
         "performed_by": user.username
-    })
+    }
+    await broadcaster.broadcast("job_started", payload)
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", payload)
 
     return {
         "ok": True,
         "job_id": job.external_id,
-        "status": "Running",
+        "status": "In Progress",
         "actual_start_at": job.actual_start_at.isoformat()
     }
 
@@ -136,15 +169,33 @@ async def pause_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.lifecycle_status != "Running":
+    if job.lifecycle_status not in ["Running", "In Progress"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot pause job in '{job.lifecycle_status}' state"
+            detail=f"Cannot pause job in '{job.lifecycle_status}' state (must be In Progress/Running)"
         )
 
+    category = (req.category or req.reason or "Material unavailable").strip()
+    detail_note = (req.detailed_reason or req.notes or "").strip()
+
+    if category.lower() == "other":
+        if not detail_note or len(detail_note) < 5:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Detailed explanation is required when pause reason is 'Other' (min 5 characters)"
+            )
+
     now = datetime.now(timezone.utc)
-    job.lifecycle_status = "Paused"
+    job.lifecycle_status = "On Hold"
+    job.pause_reason_category = category
+    job.pause_notes = detail_note
     job.pause_started_at = now
+
+    if req.expected_resume_at:
+        try:
+            job.expected_resume_at = datetime.fromisoformat(req.expected_resume_at.replace("Z", "+00:00"))
+        except Exception:
+            pass
 
     # Close previous work session
     s_stmt = select(JobExecutionSession).where(
@@ -153,8 +204,7 @@ async def pause_job(
         JobExecutionSession.ended_at.is_(None)
     ).order_by(desc(JobExecutionSession.id))
     s_res = await db.execute(s_stmt)
-    last_session = s_res.scalar_one_or_none()
-    if last_session:
+    for last_session in s_res.scalars().all():
         last_session.ended_at = now
         last_session.duration_seconds = max(0, int((now - last_session.started_at).total_seconds()))
 
@@ -164,28 +214,47 @@ async def pause_job(
         session_type="PAUSE",
         started_at=now,
         performed_by=user.username,
-        pause_reason=req.reason,
-        notes=req.notes
+        pause_reason=category,
+        notes=detail_note
     )
     db.add(pause_session)
 
     await db.commit()
     await db.refresh(job)
 
-    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+    # Terminal Process Log
+    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] PAUSE    | Job #{job.external_id} ({job.job_no}) paused by '{user.username}' | Category: '{category}' | Notes: '{detail_note}'", flush=True)
+
+    payload = {
+        "event": "job_paused",
         "job_id": job.external_id,
-        "status": "Paused",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "status": "On Hold",
         "action": "PAUSED",
-        "pause_reason": req.reason,
+        "reasonCategory": category,
+        "pause_reason": category,
+        "detailedReason": detail_note,
+        "notes": detail_note,
         "pause_started_at": now.isoformat(),
-        "performed_by": user.username
-    })
+        "pausedAt": now.isoformat(),
+        "performed_by": user.username,
+        "pausedBy": user.username
+    }
+    await broadcaster.broadcast("job_paused", payload)
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", payload)
 
     return {
         "ok": True,
         "job_id": job.external_id,
-        "status": "Paused",
-        "pause_reason": req.reason,
+        "status": "On Hold",
+        "pause_reason": category,
+        "pause_reason_category": category,
+        "pauseReasonCategory": category,
+        "pause_notes": detail_note,
+        "pauseNotes": detail_note,
+        "expected_resume_at": job.expected_resume_at.isoformat() if job.expected_resume_at else None,
+        "expectedResumeAt": job.expected_resume_at.isoformat() if job.expected_resume_at else None,
         "pause_started_at": now.isoformat()
     }
 
@@ -193,17 +262,29 @@ async def pause_job(
 @router.post("/{id}/resume")
 async def resume_job(
     id: int,
-    req: JobResumeRequest,
+    req: Optional[JobResumeRequest] = None,
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(require_admin)
 ):
+    if req is None:
+        req = JobResumeRequest()
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
     job = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.lifecycle_status != "Paused":
+    if job.lifecycle_status in ["In Progress", "Running"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot resume job: job is already active and running"
+        )
+    if job.lifecycle_status == "Completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot resume job: job has already been completed"
+        )
+    if job.lifecycle_status not in ["Paused", "On Hold"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot resume job in '{job.lifecycle_status}' state"
@@ -215,57 +296,73 @@ async def resume_job(
         paused_delta = max(0, int((now - job.pause_started_at).total_seconds()))
         job.total_paused_seconds = (job.total_paused_seconds or 0) + paused_delta
 
-    job.lifecycle_status = "Running"
+    job.lifecycle_status = "In Progress"
     job.pause_started_at = None
+    job.pause_reason_category = None
 
-    # Close pause session
+    # Close open pause sessions
     s_stmt = select(JobExecutionSession).where(
         JobExecutionSession.job_id == job.id,
         JobExecutionSession.session_type == "PAUSE",
         JobExecutionSession.ended_at.is_(None)
     ).order_by(desc(JobExecutionSession.id))
     s_res = await db.execute(s_stmt)
-    last_pause = s_res.scalar_one_or_none()
-    if last_pause:
+    for last_pause in s_res.scalars().all():
         last_pause.ended_at = now
-        last_pause.duration_seconds = paused_delta
+        last_pause.duration_seconds = max(0, int((now - last_pause.started_at).total_seconds()))
 
-    # Open new work session
+    # Open single new work session
     work_session = JobExecutionSession(
         job_id=job.id,
         session_type="WORK",
         started_at=now,
         performed_by=user.username,
-        notes=req.notes or "Resumed by Admin"
+        worker_id=job.current_worker_id,
+        worker_position=job.current_worker_position or "Engineer",
+        notes=req.notes or f"Resumed by {user.username}"
     )
     db.add(work_session)
 
     await db.commit()
     await db.refresh(job)
 
-    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+    # Terminal Process Log
+    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] RESUME   | Job #{job.external_id} ({job.job_no}) resumed by '{user.username}' | Paused interval: {paused_delta}s | Status: 'In Progress'", flush=True)
+
+    payload = {
+        "event": "job_resumed",
         "job_id": job.external_id,
-        "status": "Running",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "status": "In Progress",
         "action": "RESUMED",
+        "resumedBy": user.username,
+        "resumedAt": now.isoformat(),
+        "pauseDuration": paused_delta,
         "total_paused_seconds": job.total_paused_seconds,
         "performed_by": user.username
-    })
+    }
+    await broadcaster.broadcast("job_resumed", payload)
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", payload)
 
     return {
         "ok": True,
         "job_id": job.external_id,
-        "status": "Running",
-        "total_paused_seconds": job.total_paused_seconds
+        "status": "In Progress",
+        "total_paused_seconds": job.total_paused_seconds,
+        "totalPausedSeconds": job.total_paused_seconds
     }
 
 # POST /api/jobs/{id}/complete
 @router.post("/{id}/complete")
 async def complete_job(
     id: int,
-    req: JobCompleteRequest,
+    req: Optional[JobCompleteRequest] = None,
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(require_admin)
 ):
+    if req is None:
+        req = JobCompleteRequest()
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
     job = res.scalar_one_or_none()
@@ -315,16 +412,23 @@ async def complete_job(
     )
     db.add(history)
 
-    await db.commit()
-    await db.refresh(job)
+    # Terminal Process Log
+    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] COMPLETE | Job #{job.external_id} ({job.job_no}) completed by '{user.username}' | Active duration: {job.actual_duration_seconds}s", flush=True)
 
-    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+    payload = {
+        "event": "job_completed",
         "job_id": job.external_id,
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
         "status": "Completed",
         "action": "COMPLETED",
         "actual_duration_seconds": job.actual_duration_seconds,
+        "totalActiveDuration": job.actual_duration_seconds,
+        "completedAt": now.isoformat(),
         "performed_by": user.username
-    })
+    }
+    await broadcaster.broadcast("job_completed", payload)
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", payload)
 
     return {
         "ok": True,
@@ -381,11 +485,40 @@ async def handover_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Fetch next worker name from users catalog
-    w_stmt = select(User).where(User.id == req.to_worker_id)
-    w_res = await db.execute(w_stmt)
-    next_worker = w_res.scalar_one_or_none()
-    next_worker_name = next_worker.name if next_worker else f"Worker #{req.to_worker_id}"
+    # Resolve next worker target
+    target_worker_id = req.to_worker_id or req.toWorkerId
+    target_worker_name = req.to_worker_name or req.toWorker
+    target_position = req.to_worker_position or req.toPosition or "Engineer"
+
+    next_worker = None
+    if target_worker_id:
+        w_stmt = select(User).where(User.id == target_worker_id)
+        w_res = await db.execute(w_stmt)
+        next_worker = w_res.scalar_one_or_none()
+        if not next_worker:
+            a_stmt = select(Account).where(Account.id == target_worker_id)
+            a_res = await db.execute(a_stmt)
+            acc = a_res.scalar_one_or_none()
+            if acc:
+                target_worker_name = acc.username
+    elif target_worker_name:
+        w_stmt = select(User).where(func.lower(User.name) == target_worker_name.strip().lower())
+        w_res = await db.execute(w_stmt)
+        next_worker = w_res.scalar_one_or_none()
+        if next_worker:
+            target_worker_id = next_worker.id
+        else:
+            a_stmt = select(Account).where(func.lower(Account.username) == target_worker_name.strip().lower())
+            a_res = await db.execute(a_stmt)
+            acc = a_res.scalar_one_or_none()
+            if acc:
+                target_worker_id = acc.id
+                target_worker_name = acc.username
+
+    if not target_worker_id:
+        target_worker_id = 1
+
+    next_worker_name = next_worker.name if next_worker else (target_worker_name or f"Worker #{target_worker_id}")
 
     # Fetch previous worker name
     prev_worker_name = "Unassigned"
@@ -395,6 +528,12 @@ async def handover_job(
         pw_match = pw_res.scalar_one_or_none()
         if pw_match:
             prev_worker_name = pw_match.name
+        else:
+            paw_stmt = select(Account).where(Account.id == job.current_worker_id)
+            paw_res = await db.execute(paw_stmt)
+            paw_match = paw_res.scalar_one_or_none()
+            if paw_match:
+                prev_worker_name = paw_match.username
 
     now = datetime.now(timezone.utc)
     from_worker_id = job.current_worker_id
@@ -412,73 +551,92 @@ async def handover_job(
         s.duration_seconds = max(0, int((now - s.started_at).total_seconds()))
         active_seconds_before += s.duration_seconds
 
+    summary_text = req.work_completed_summary or req.workCompletedSummary or f"Handover from {prev_worker_name} ({from_worker_position}) to {next_worker_name} ({target_position})"
+
+    is_paused_already = job.lifecycle_status in ["Paused", "On Hold"]
+    is_running = True
+    if req.action == "PAUSED" or req.keepRunning is False or is_paused_already:
+        is_running = False
+
     # Create handover record
     handover_rec = JobHandover(
         job_id=job.id,
         from_worker_id=from_worker_id,
         from_worker_position=from_worker_position,
-        to_worker_id=req.to_worker_id,
-        to_worker_position=req.to_worker_position or "Engineer",
+        to_worker_id=target_worker_id,
+        to_worker_position=target_position,
         handover_at=now,
         reason=req.reason,
         notes=req.notes,
-        work_completed_summary=f"Handover from {prev_worker_name} ({from_worker_position}) to {next_worker_name} ({req.to_worker_position})",
+        work_completed_summary=summary_text,
         active_seconds_before_handover=active_seconds_before,
+        status_at_handover=job.lifecycle_status,
+        progress_at_handover=float(job.progress_percentage or 0.0),
         performed_by=user.username
     )
     db.add(handover_rec)
 
     # Update job worker pointers
     job.previous_worker_id = from_worker_id
-    job.current_worker_id = req.to_worker_id
-    job.current_worker_position = req.to_worker_position or "Engineer"
+    job.current_worker_id = target_worker_id
+    job.current_worker_position = target_position
     job.last_handover_at = now
     job.handover_notes = req.notes
     job.next_worker_id = None
 
-    if req.action == "RUNNING":
-        job.lifecycle_status = "Running"
+    if is_running:
+        job.lifecycle_status = "In Progress"
         job.pause_started_at = None
         new_session = JobExecutionSession(
             job_id=job.id,
             session_type="WORK",
             started_at=now,
             performed_by=next_worker_name,
-            worker_id=req.to_worker_id,
-            worker_position=req.to_worker_position or "Engineer",
+            worker_id=target_worker_id,
+            worker_position=target_position,
             notes=f"Started following handover ({req.reason})"
         )
         db.add(new_session)
     else:
-        job.lifecycle_status = "Paused"
-        job.pause_started_at = now
-        pause_session = JobExecutionSession(
-            job_id=job.id,
-            session_type="PAUSE",
-            started_at=now,
-            performed_by=user.username,
-            pause_reason=f"Handover to {next_worker_name}",
-            notes=req.notes
-        )
-        db.add(pause_session)
+        # Preserve On Hold state
+        job.lifecycle_status = "On Hold"
+        if not is_paused_already:
+            job.pause_started_at = now
+            pause_session = JobExecutionSession(
+                job_id=job.id,
+                session_type="PAUSE",
+                started_at=now,
+                performed_by=user.username,
+                pause_reason=f"Handover to {next_worker_name}",
+                notes=req.notes
+            )
+            db.add(pause_session)
 
     await db.commit()
     await db.refresh(job)
 
+    # Terminal Process Log
+    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] HANDOVER | Job #{job.external_id} ({job.job_no}) transferred from '{prev_worker_name}' to '{next_worker_name}' ({target_position}) | Reason: '{req.reason}'", flush=True)
+
     # Broadcast Handover event for Toast and live updates
-    await broadcaster.broadcast("JOB_HANDOVER", {
+    payload = {
+        "event": "job_handed_over",
         "job_id": job.external_id,
+        "jobId": job.external_id,
         "jobNo": job.job_no,
         "panelName": job.panel_name,
         "fromWorker": prev_worker_name,
         "fromPosition": from_worker_position,
         "toWorker": next_worker_name,
-        "toPosition": req.to_worker_position,
+        "toPosition": target_position,
         "reason": req.reason,
         "handoverAt": now.isoformat(),
         "status": job.lifecycle_status,
+        "progressAtHandover": float(job.progress_percentage or 0.0),
         "performed_by": user.username
-    })
+    }
+    await broadcaster.broadcast("job_handed_over", payload)
+    await broadcaster.broadcast("JOB_HANDOVER", payload)
 
     return {
         "ok": True,
@@ -530,4 +688,77 @@ async def get_job_handovers(
         }
         for h in handovers
     ]
+
+# POST /api/jobs/{id}/progress
+@router.post("/{id}/progress")
+async def update_job_progress(
+    id: int,
+    req: JobProgressUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(require_admin)
+):
+    stmt = select(Job).where(Job.external_id == id)
+    res = await db.execute(stmt)
+    job = res.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if req.completed_work_units is not None:
+        job.completed_work_units = req.completed_work_units
+    if req.target_work_units is not None:
+        job.target_work_units = req.target_work_units
+
+    if req.progress_percentage is not None:
+        job.progress_percentage = req.progress_percentage
+    elif job.target_work_units and job.target_work_units > 0 and job.completed_work_units is not None:
+        job.progress_percentage = round((float(job.completed_work_units) / float(job.target_work_units)) * 100.0, 2)
+
+    now = datetime.now(timezone.utc)
+    dur = int(getattr(job, "actual_duration_seconds", 0) or 0)
+    current_pct = float(job.progress_percentage or 0.0)
+
+    # Log progress history
+    hist = JobProgressHistory(
+        job_id=job.id,
+        recorded_at=now,
+        progress_percentage=current_pct,
+        active_duration_seconds=dur,
+        recorded_by=user.username,
+        note=req.note or f"Updated to {current_pct}%"
+    )
+    db.add(hist)
+
+    # Terminal Process Log
+    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] PROGRESS | Job #{job.external_id} ({job.job_no}) progress updated by '{user.username}' | {current_pct}% ({job.completed_work_units}/{job.target_work_units} units) | Note: '{req.note or ''}'", flush=True)
+
+    # Broadcast event for live timeline updates
+    payload = {
+        "event": "job_progress_updated",
+        "job_id": job.external_id,
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "progress_percentage": float(job.progress_percentage or 0.0),
+        "progressPercentage": float(job.progress_percentage or 0.0),
+        "completed_work_units": job.completed_work_units,
+        "completedWorkUnits": job.completed_work_units,
+        "target_work_units": job.target_work_units,
+        "targetWorkUnits": job.target_work_units,
+        "status": job.lifecycle_status,
+        "performed_by": user.username,
+        "recorded_at": now.isoformat()
+    }
+    await broadcaster.broadcast("job_progress_updated", payload)
+    await broadcaster.broadcast("JOB_PROGRESS_UPDATED", payload)
+
+    return {
+        "ok": True,
+        "job_id": job.external_id,
+        "progress_percentage": float(job.progress_percentage or 0.0),
+        "progressPercentage": float(job.progress_percentage or 0.0),
+        "completed_work_units": job.completed_work_units,
+        "completedWorkUnits": job.completed_work_units,
+        "target_work_units": job.target_work_units,
+        "targetWorkUnits": job.target_work_units
+    }
+
 

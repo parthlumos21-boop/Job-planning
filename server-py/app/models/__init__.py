@@ -71,10 +71,16 @@ class Job(Base):
     actual_end_at = Column(DateTime(timezone=True), nullable=True)
     total_paused_seconds = Column(Integer, default=0)
     pause_started_at = Column(DateTime(timezone=True), nullable=True)
+    pause_reason_category = Column(String(100), nullable=True)
+    pause_notes = Column(Text, nullable=True)
+    expected_resume_at = Column(DateTime(timezone=True), nullable=True)
     actual_duration_seconds = Column(Integer, default=0)
     progress_percentage = Column(Numeric(5, 2), default=0.00)
     priority = Column(String(20), default="Normal")
     assigned_engineer_id = Column(Integer, nullable=True)
+    assigned_by_user_id = Column(Integer, nullable=True)
+    target_work_units = Column(Integer, default=100)
+    completed_work_units = Column(Integer, default=0)
 
     # Worker Assignment & Handover
     current_worker_id = Column(Integer, nullable=True, index=True)
@@ -129,6 +135,8 @@ class JobHandover(Base):
     notes = Column(Text, nullable=True)
     work_completed_summary = Column(Text, nullable=True)
     active_seconds_before_handover = Column(Integer, default=0)
+    status_at_handover = Column(String(50), nullable=True)
+    progress_at_handover = Column(Numeric(5, 2), nullable=True)
     performed_by = Column(String(100), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

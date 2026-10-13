@@ -1,6 +1,6 @@
 const express = require("express");
 const XLSX = require("xlsx-js-style");
-const db = require("../database/db");
+const db = require("../../database/db");
 const { canViewJob } = require("../utils/jobAccess");
 
 const router = express.Router();

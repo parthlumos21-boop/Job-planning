@@ -146,7 +146,7 @@ async def list_jobs(
 
     # In-memory or relational filtering
     if client:
-        jobs = [j for j in jobs if str(j.client_id) == str(client) or (j.client_name and client.lower() in j.client_name.lower())]
+        jobs = [j for j in jobs if str(j.client_id) == client or (j.client_name and client.lower() in j.client_name.lower())]
 
     if department:
         jobs = [j for j in jobs if department in visible_departments_for_job(j)]

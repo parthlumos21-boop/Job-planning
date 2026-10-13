@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import LiveTimelineChart from '../components/LiveTimelineChart';
+import JobHistoryDrawer from '../components/JobHistoryDrawer';
+import JobProgressModal from '../components/JobProgressModal';
 import { ALL_DEPARTMENT_USER_OPTIONS } from '../jobs/departmentUserOptions';
 import {
   Play, Pause, CheckCircle2, Clock, AlertTriangle, TrendingUp,
@@ -15,13 +18,13 @@ import {
 } from 'recharts';
 
 const PAUSE_REASONS = [
-  'Break',
-  'Material Shortage',
-  'Drawing Revision Pending',
-  'Machine Maintenance',
-  'Shift Change',
-  'Client Query / Approval',
-  'Quality Inspection',
+  'Material unavailable',
+  'Waiting for approval',
+  'Machine breakdown',
+  'Technical issue',
+  'Employee unavailable',
+  'Customer dependency',
+  'Power outage',
   'Other'
 ];
 
@@ -59,6 +62,9 @@ function formatTime(totalSeconds) {
 }
 
 export default function KevalDashboard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'executive';
+
   const [jobs, setJobs] = useState([]);
   const [kpis, setKpis] = useState(null);
   const [plannedVsActual, setPlannedVsActual] = useState([]);
@@ -76,18 +82,28 @@ export default function KevalDashboard() {
   // Selected Job for Live Timeline Chart
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [timelineData, setTimelineData] = useState(null);
+  const [timelineOverviewData, setTimelineOverviewData] = useState([]);
+  const [employeesList, setEmployeesList] = useState([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
+
+  // History & Progress Modals State
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const [historyJobId, setHistoryJobId] = useState(null);
+  const [progressModalOpen, setProgressModalOpen] = useState(false);
+  const [progressModalJob, setProgressModalJob] = useState(null);
 
   // Pause Modal State
   const [pauseModalOpen, setPauseModalOpen] = useState(false);
   const [targetJobId, setTargetJobId] = useState(null);
-  const [pauseReason, setPauseReason] = useState('Break');
+  const [pauseReason, setPauseReason] = useState(PAUSE_REASONS[0]);
   const [pauseNotes, setPauseNotes] = useState('');
+  const [expectedResumeAt, setExpectedResumeAt] = useState('');
 
   // Handover Modal State
   const [handoverModalOpen, setHandoverModalOpen] = useState(false);
   const [handoverJob, setHandoverJob] = useState(null);
   const [toWorker, setToWorker] = useState('');
+  const [toWorkerId, setToWorkerId] = useState(null);
   const [toPosition, setToPosition] = useState(WORKER_POSITIONS[0]);
   const [handoverReason, setHandoverReason] = useState(HANDOVER_REASONS[0]);
   const [handoverNotes, setHandoverNotes] = useState('');
@@ -146,7 +162,9 @@ export default function KevalDashboard() {
         workloadRes,
         bottlenecksRes,
         rankingsRes,
-        flowRes
+        flowRes,
+        timelineOverviewRes,
+        usersRes
       ] = await Promise.all([
         api.get('/job-monitoring/running'),
         api.get('/job-analytics/kpis'),
@@ -154,7 +172,9 @@ export default function KevalDashboard() {
         api.get('/job-analytics/workload'),
         api.get('/job-analytics/bottlenecks').catch(() => ({ data: [] })),
         api.get('/job-analytics/performance-rankings').catch(() => ({ data: [] })),
-        api.get('/job-analytics/flow-velocity').catch(() => ({ data: [] }))
+        api.get('/job-analytics/flow-velocity').catch(() => ({ data: [] })),
+        api.get('/job-monitoring/timeline-overview').catch(() => ({ data: { jobs: [] } })),
+        api.get('/users').catch(() => ({ data: [] }))
       ]);
 
       const data = runningRes.data;
@@ -171,6 +191,11 @@ export default function KevalDashboard() {
       setBottlenecks(bottlenecksRes.data || []);
       setRankings(rankingsRes.data || []);
       setFlowVelocity(flowRes.data || []);
+      setTimelineOverviewData(timelineOverviewRes.data?.jobs || []);
+
+      if (usersRes.data?.length) {
+        setEmployeesList(usersRes.data);
+      }
 
       // Auto-select active job for timeline chart if none selected
       if (fetchedJobs.length > 0) {
@@ -209,19 +234,30 @@ export default function KevalDashboard() {
       eventSource.onmessage = (e) => {
         try {
           const payload = JSON.parse(e.data);
-          if (payload.event === 'JOB_STATUS_CHANGED') {
+          const ev = payload.event;
+          if (ev === 'JOB_STATUS_CHANGED' || ev === 'job_started' || ev === 'job_paused' || ev === 'job_resumed' || ev === 'job_completed') {
             fetchAllData(true);
             const status = payload.status || 'Updated';
-            const jNo = payload.jobNo || `#${payload.jobId}`;
-            addToast('status', `Job Status Changed: ${status}`, `${jNo} is now ${status}`, payload.jobId);
-          } else if (payload.event === 'JOB_HANDOVER') {
+            const jNo = payload.jobNo || `#${payload.jobId || payload.job_id}`;
+            const desc = payload.pause_reason ? `${jNo} is ${status} (${payload.pause_reason})` : `${jNo} is now ${status}`;
+            addToast('status', `Job Status: ${status}`, desc, payload.jobId || payload.job_id);
+          } else if (ev === 'JOB_HANDOVER' || ev === 'job_handed_over') {
             fetchAllData(true);
-            const jNo = payload.jobNo || `#${payload.jobId}`;
+            const jNo = payload.jobNo || `#${payload.jobId || payload.job_id}`;
             addToast(
               'handover',
               'Worker Handover Executed',
               `${jNo}: Transferred from ${payload.fromWorker} to ${payload.toWorker} (${payload.toPosition})`,
-              payload.jobId
+              payload.jobId || payload.job_id
+            );
+          } else if (ev === 'JOB_PROGRESS_UPDATED' || ev === 'job_progress_updated') {
+            fetchAllData(true);
+            const jNo = payload.jobNo || `#${payload.jobId || payload.job_id}`;
+            addToast(
+              'progress',
+              'Progress Updated',
+              `${jNo}: Completion now ${payload.progressPercentage ?? payload.progress_percentage}%`,
+              payload.jobId || payload.job_id
             );
           }
         } catch (err) {
@@ -299,20 +335,29 @@ export default function KevalDashboard() {
 
   const openPauseModal = (jobId) => {
     setTargetJobId(jobId);
-    setPauseReason('Break');
+    setPauseReason(PAUSE_REASONS[0]);
     setPauseNotes('');
+    setExpectedResumeAt('');
     setPauseModalOpen(true);
   };
 
   const handleConfirmPause = async () => {
     if (!targetJobId) return;
+    if (pauseReason === 'Other' && (!pauseNotes || pauseNotes.trim().length < 5)) {
+      alert("Please provide a detailed explanation when selecting 'Other' (minimum 5 characters)");
+      return;
+    }
+
     setActionLoading(`pause-${targetJobId}`);
     try {
       await api.post(`/jobs/${targetJobId}/pause`, {
+        category: pauseReason,
         reason: pauseReason,
-        notes: pauseNotes
+        detailed_reason: pauseNotes,
+        notes: pauseNotes,
+        expected_resume_at: expectedResumeAt ? new Date(expectedResumeAt).toISOString() : undefined
       });
-      addToast('pause', 'Job Paused', `Job #${targetJobId} paused (${pauseReason})`, targetJobId);
+      addToast('pause', 'Job Paused', `Job #${targetJobId} placed On Hold (${pauseReason})`, targetJobId);
       setPauseModalOpen(false);
       await fetchAllData(true);
       if (selectedJobId === targetJobId) fetchTimeline(targetJobId);
@@ -355,7 +400,9 @@ export default function KevalDashboard() {
   // Handover Modal handlers
   const openHandoverModal = (job) => {
     setHandoverJob(job);
-    setToWorker(ALL_DEPARTMENT_USER_OPTIONS[0] || 'Janak');
+    const initialWorker = employeesList[0] || null;
+    setToWorker(initialWorker ? initialWorker.name : (ALL_DEPARTMENT_USER_OPTIONS[0] || 'Janak'));
+    setToWorkerId(initialWorker ? initialWorker.id : 1);
     setToPosition(WORKER_POSITIONS[0]);
     setHandoverReason(HANDOVER_REASONS[0]);
     setHandoverNotes('');
@@ -369,11 +416,12 @@ export default function KevalDashboard() {
     setActionLoading(`handover-${handoverJob.id}`);
     try {
       await api.post(`/jobs/${handoverJob.id}/handover`, {
-        toWorker: toWorker,
-        toPosition: toPosition,
+        to_worker_id: toWorkerId,
+        to_worker_name: toWorker,
+        to_worker_position: toPosition,
         reason: handoverReason,
         notes: handoverNotes,
-        workCompletedSummary: handoverWorkSummary,
+        work_completed_summary: handoverWorkSummary,
         keepRunning: keepRunningOnHandover
       });
       addToast(
@@ -724,28 +772,47 @@ export default function KevalDashboard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 2: DYNAMIC LIVE OPERATIONAL TIMELINE CHART                        */}
+      {/* SECTION 2: DYNAMIC LIVE OPERATIONAL TIMELINE CHART (ADMIN / EXEC ONLY)    */}
       {/* ========================================================================= */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <Clock size={16} className="text-blue-600" />
-            <span>Dynamic Live Operational Timeline Chart</span>
-          </h2>
-          <span className="text-xs text-slate-500">
-            Select any job below or in the dropdown to inspect its live timeline
-          </span>
-        </div>
+      {isAdmin ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <Clock size={16} className="text-blue-600" />
+              <span>Dynamic Live Operational Timeline Chart (Admin View)</span>
+            </h2>
+            <span className="text-xs text-slate-500">
+              Real-time multi-job Gantt matrix with 1-second live cursor
+            </span>
+          </div>
 
-        <LiveTimelineChart
-          job={currentSelectedJob}
-          timelineData={timelineData}
-          loading={timelineLoading}
-          onRefresh={() => fetchTimeline(selectedJobId)}
-          availableJobs={jobs}
-          onSelectJob={(j) => setSelectedJobId(j.id)}
-        />
-      </div>
+          <LiveTimelineChart
+            jobs={timelineOverviewData.length > 0 ? timelineOverviewData : jobs}
+            loading={refreshing}
+            selectedJobId={selectedJobId}
+            onSelectJob={(j) => setSelectedJobId(j.id)}
+            onOpenHistory={(jId) => {
+              setHistoryJobId(jId);
+              setHistoryDrawerOpen(true);
+            }}
+            onOpenProgress={(j) => {
+              setProgressModalJob(j);
+              setProgressModalOpen(true);
+            }}
+            onOpenHandover={(j) => openHandoverModal(j)}
+            onRefresh={() => fetchAllData(true)}
+          />
+        </div>
+      ) : (
+        <div className="p-4 rounded-xl bg-blue-50/80 border border-blue-200 text-blue-900 text-xs flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck size={18} className="text-blue-600 shrink-0" />
+            <span>
+              Logged in as <strong>{user?.username || 'Staff'}</strong> ({user?.role || 'User'}). Operational Timeline Gantt Chart is restricted to Administrators. Below are your assigned jobs.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* SECTION 3: LIVE JOB ACTIVITY & HANDOVER TABLE                             */}
@@ -938,16 +1005,39 @@ export default function KevalDashboard() {
                         </div>
                       </td>
 
-                      {/* Handover Action */}
+                      {/* Handover & Quick Actions */}
                       <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => openHandoverModal(j)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 transition-all cursor-pointer"
-                          title="Transfer work to another engineer or shift"
-                        >
-                          <ArrowRightLeft size={13} />
-                          <span>Handover</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openHandoverModal(j)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold border border-amber-200 transition-all cursor-pointer"
+                            title="Transfer work to another engineer or shift"
+                          >
+                            <ArrowRightLeft size={13} />
+                            <span>Handover</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setProgressModalJob(j);
+                              setProgressModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 transition-all cursor-pointer"
+                            title="Record progress percentage and units"
+                          >
+                            <Activity size={13} />
+                            <span>Progress</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setHistoryJobId(j.id);
+                              setHistoryDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 transition-all cursor-pointer"
+                            title="View chronological audit history"
+                          >
+                            <Clock size={13} />
+                          </button>
+                        </div>
                       </td>
 
                       {/* Execution Controls */}
@@ -1208,9 +1298,14 @@ export default function KevalDashboard() {
             </div>
 
             <div className="space-y-4 text-xs">
+              <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-between">
+                <span>Paused by: <strong>{user?.username || 'Current User'}</strong></span>
+                <span className="text-[10px] text-amber-600 font-mono">Server UTC Time</span>
+              </div>
+
               <div>
                 <label className="font-semibold text-slate-700 block mb-1.5">
-                  Select Reason for Pause *
+                  Select Reason Category *
                 </label>
                 <select
                   value={pauseReason}
@@ -1227,13 +1322,33 @@ export default function KevalDashboard() {
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1.5">
-                  Additional Notes / Explanation (Optional)
+                  {pauseReason === 'Other' ? (
+                    <span className="text-rose-700 font-bold">Detailed Explanation (Mandatory for 'Other') *</span>
+                  ) : (
+                    <span>Additional Notes / Explanation (Optional)</span>
+                  )}
                 </label>
                 <textarea
                   value={pauseNotes}
                   onChange={(e) => setPauseNotes(e.target.value)}
-                  placeholder="e.g. Awaiting revision for busbar drawing from Keyur Shah..."
+                  placeholder={pauseReason === 'Other' ? "Please explain the specific reason for pausing (min 5 characters)..." : "e.g. Awaiting revision for busbar drawing from Keyur Shah..."}
                   rows={3}
+                  className={`w-full p-2.5 bg-slate-50 border rounded-lg text-slate-800 focus:outline-none text-xs ${
+                    pauseReason === 'Other' && !pauseNotes.trim()
+                      ? 'border-rose-300 focus:border-rose-500'
+                      : 'border-slate-200 focus:border-amber-500'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1.5">
+                  Expected Resume Time (Optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={expectedResumeAt}
+                  onChange={(e) => setExpectedResumeAt(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:border-amber-500 text-xs"
                 />
               </div>
@@ -1313,14 +1428,25 @@ export default function KevalDashboard() {
                   </label>
                   <select
                     value={toWorker}
-                    onChange={(e) => setToWorker(e.target.value)}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      setToWorker(name);
+                      const found = employeesList.find((emp) => emp.name === name);
+                      if (found) setToWorkerId(found.id);
+                    }}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:border-indigo-500"
                   >
-                    {ALL_DEPARTMENT_USER_OPTIONS.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
+                    {employeesList.length > 0
+                      ? employeesList.map((emp) => (
+                          <option key={emp.id || emp.name} value={emp.name}>
+                            {emp.name} {emp.departments?.length ? `(${emp.departments.join(', ')})` : ''}
+                          </option>
+                        ))
+                      : ALL_DEPARTMENT_USER_OPTIONS.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
                   </select>
                 </div>
 
@@ -1423,6 +1549,33 @@ export default function KevalDashboard() {
           </div>
         </div>
       )}
+
+      {/* Slide-Out History Drawer */}
+      <JobHistoryDrawer
+        jobId={historyJobId}
+        isOpen={historyDrawerOpen}
+        onClose={() => setHistoryDrawerOpen(false)}
+        onOpenHandover={(job) => {
+          setHistoryDrawerOpen(false);
+          openHandoverModal(job);
+        }}
+        onOpenProgress={(job) => {
+          setHistoryDrawerOpen(false);
+          setProgressModalJob(job);
+          setProgressModalOpen(true);
+        }}
+      />
+
+      {/* Job Progress Update Modal */}
+      <JobProgressModal
+        job={progressModalJob}
+        isOpen={progressModalOpen}
+        onClose={() => setProgressModalOpen(false)}
+        onSuccess={() => {
+          fetchAllData(true);
+          addToast('success', 'Progress Saved', `Progress saved for ${progressModalJob?.jobNo || '#' + progressModalJob?.id}`, progressModalJob?.id);
+        }}
+      />
     </div>
   );
 }
