@@ -26,7 +26,9 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     user_payload = UserPayload(
         username=account.username,
         role=account.role or "user",
-        departments=account.departments or []
+        departments=account.departments or [],
+        id=account.id,
+        name=account.username
     )
 
     token = create_access_token(user_payload.model_dump())

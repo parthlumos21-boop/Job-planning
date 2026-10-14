@@ -93,6 +93,23 @@ To guarantee the system is **changeable** and never locked into hardcoded rules:
   ```
 - This architecture enables instant adjustments without rewriting component code or backend endpoints.
 
+### 2.3 "My Jobs" & "Job Handover" in Sidebar & Dashboard
+To ensure every department user (`swatisales`, `swatidesign`, `swatipurchase`, `swatiproduction`, `mechdesign1`, `keval v shah`, etc.) has instant access to their workflow:
+
+1. **Sidebar Navigation Updates (`Layout.jsx` & `Sidebar.jsx`):**
+   - **"My Jobs"** (`/my-jobs`): Filtered view showing jobs assigned to the logged-in user (as Responsible Engineer, Planning Owner, Current Worker, or jobs within their department).
+   - **"Job Handover"** (`/jobs/handover`): Dedicated Handover Station displaying incoming review queues and outgoing handovers, with a real-time badge for pending items.
+2. **Dashboard Integration (`Dashboard.jsx`):**
+   - **"My Active Jobs & Handover Station"** KPI banner:
+     - *My Assigned Jobs* count
+     - *Incoming Handovers Pending My Review*
+     - *Handovers Returned to Me (Action Required)*
+     - *Accepted / In Progress Handovers*
+   - Direct tab/toggle: **[All Master Jobs]** ⟷ **[My Jobs & Handover Queue]**.
+   - Direct inline **[Handover]** button on dashboard cards and table rows.
+
+---
+
 ## 3. Dynamic Searchable Responsible Engineer Dropdown (`/jobs/new` & All Forms)
 
 ### 3.1 Deficiencies in Current Implementation
@@ -169,6 +186,32 @@ Clicking **[Review]** opens the full Handover Review Drawer/Modal displaying:
   - **[Accept Handover]** (Green): Marks as Accepted, records Planning Owner, sets status to `Accepted`.
   - **[Return for Correction]** (Rose): Requires mandatory return reason modal, sets status to `Returned for Correction`, sends notification to Marketing.
   - **[Forward to Design]** (Blue): Active once Planning work is complete, sets target department to `design`.
+
+### 5.3 Universal Inline Handover Process Across All Job Views ("All Have Inside")
+To satisfy the user requirement: *"all have inside can have handover process can do"*:
+
+Every screen and list where a job appears will feature a prominent, interactive **`[Handover]`** button:
+1. **In "My Jobs" View:** Each row/card displays the current stage, responsible engineer, and an inline **`[Handover]`** button.
+2. **In "View Jobs" (`JobList.jsx`):** Each job in the master table has an inline action to trigger the handover modal without navigating away.
+3. **In Dashboard Cards & Tables (`JobCard.jsx` & `Dashboard.jsx`):** Quick **`[Handover]`** button with status chip.
+4. **In Job Details (`JobDetail.jsx`):** Top-right Handover Action Bar showing current handover stage and one-click submission/acceptance.
+
+#### The Universal Inline Handover Modal (`DepartmentHandoverModal.jsx`):
+When any department user clicks **`[Handover]`**:
+- **Automatic Context Detection:**
+  - Detects current user (`swatisales`, `swatidesign`, `swatipurchase`, etc.) and their department.
+  - Determines if the job is **Outgoing** (user wants to submit handover to next department) or **Incoming** (job was handed over to user's department for review/acceptance).
+- **If Outgoing Handover:**
+  - Select Destination Department (e.g. Marketing ➔ Planning, Planning ➔ Design, Design ➔ Purchase, etc.).
+  - Interactive Checklist verification.
+  - Optional handover notes and file attachments.
+  - One-click **[Submit Handover]**.
+- **If Incoming Handover Pending Review:**
+  - Displays submitted checklist and sender notes.
+  - One-click **[Accept Handover]** (with Planning Owner or Lead Engineer assignment).
+  - One-click **[Return for Correction]** (with mandatory return reason).
+- **Embedded Audit Timeline:**
+  - Displays previous handovers, return reasons, and timestamps directly inside the modal so the team has full context.
 
 ---
 
@@ -277,14 +320,23 @@ To satisfy purchase order and drawing attachment requirements:
    - Add Handover Checklist accordion before submission.
    - Add "Submit for Planning Handover" action button alongside "Save Draft" for all authorized users.
 2. `client/src/layouts/Layout.jsx` & `client/src/components/Sidebar.jsx`:
-   - Add navigation item for **Handover for Planning** (`/jobs/handover/planning`) with badge indicator for pending count.
-3. `client/src/App.jsx`:
-   - Register route `/jobs/handover/planning`.
-4. `client/src/jobs/JobDetail.jsx`:
-   - Display Handover Status badge, Planning Owner name, and chronological Handover History timeline.
+   - Add **"My Jobs"** navigation item (`/my-jobs`) with icon and active styling.
+   - Add **"Job Handover"** navigation item (`/jobs/handover`) with real-time pending notification badge.
+3. `client/src/dashboard/Dashboard.jsx`:
+   - Add "My Active Jobs & Handover Station" banner with KPI metrics (My Jobs, Incoming Handovers, Returned Handovers).
+   - Fast toggle: **[All Master Jobs]** ⟷ **[My Jobs & Handover Queue]**.
+   - Direct inline **[Handover]** button on job cards and table rows.
+4. `client/src/jobs/JobList.jsx` & `client/src/components/JobCard.jsx`:
+   - Add inline **[Handover]** button to each job row/card to open `DepartmentHandoverModal`.
+5. `client/src/App.jsx`:
+   - Register route `/my-jobs` and `/jobs/handover`.
+6. `client/src/jobs/JobDetail.jsx`:
+   - Display Handover Status badge, Planning Owner name, top-right Handover Action Bar, and chronological Handover History timeline.
 
 ### New Files to Create:
-1. `client/src/jobs/SearchableUserSelect.jsx`: Reusable searchable user dropdown component with loading, empty, and active states.
-2. `client/src/jobs/PlanningHandoverInbox.jsx`: The dedicated Planning Handover inbox with tabs, filters, and review modal.
-3. `client/src/jobs/HandoverChecklistModal.jsx`: Checklist verification and return reason modal.
-4. `server-py/app/api/v1/job_handover.py`: Dedicated API router handling `/api/jobs/{id}/handover/submit`, `/accept`, `/return`, `/planning-owner`.
+1. `client/src/jobs/MyJobs.jsx`: Dedicated screen for user's assigned and department jobs, with inline handover actions and status indicators.
+2. `client/src/jobs/DepartmentHandoverModal.jsx`: Reusable universal handover modal providing seamless submit, accept, return, and checklist verification from any screen.
+3. `client/src/jobs/SearchableUserSelect.jsx`: Reusable searchable user dropdown component with loading, empty, and active states.
+4. `client/src/jobs/PlanningHandoverInbox.jsx`: The dedicated Planning Handover inbox station with tabs, filters, and review drawers.
+5. `client/src/config/workflowConfig.js`: Centralized, changeable workflow capabilities and permission flags.
+6. `server-py/app/api/v1/job_handover.py`: Dedicated API router handling `/api/jobs/{id}/handover/submit`, `/accept`, `/return`, `/planning-owner`, and department transitions.

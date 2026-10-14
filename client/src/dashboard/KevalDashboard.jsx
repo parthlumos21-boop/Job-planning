@@ -203,8 +203,8 @@ export default function KevalDashboard() {
           if (preserveSelected && prevId && fetchedJobs.some((j) => j.id === prevId)) {
             return prevId;
           }
-          // Prioritize running job
-          const runningJob = fetchedJobs.find((j) => j.status === 'Running');
+          // Prioritize running / in-progress job
+          const runningJob = fetchedJobs.find((j) => j.status === 'Running' || j.status === 'In Progress');
           return runningJob ? runningJob.id : fetchedJobs[0].id;
         });
       }
@@ -222,14 +222,15 @@ export default function KevalDashboard() {
 
     // Setup SSE connection
     let eventSource = null;
-    try {
-      const token = localStorage.getItem('token');
-      const sseUrl = `/api/job-monitoring/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-      eventSource = new EventSource(sseUrl);
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const sseUrl = `/api/job-monitoring/stream?token=${encodeURIComponent(token)}`;
+        eventSource = new EventSource(sseUrl);
 
-      eventSource.onopen = () => {
-        setSseConnected(true);
-      };
+        eventSource.onopen = () => {
+          setSseConnected(true);
+        };
 
       eventSource.onmessage = (e) => {
         try {
@@ -268,8 +269,9 @@ export default function KevalDashboard() {
       eventSource.onerror = () => {
         setSseConnected(false);
       };
-    } catch (err) {
-      setSseConnected(false);
+      } catch (err) {
+        setSseConnected(false);
+      }
     }
 
     // Fallback polling interval every 12s
@@ -309,7 +311,7 @@ export default function KevalDashboard() {
       return Math.max(0, rawElapsed - pausedSeconds);
     }
 
-    if (status === 'Running') {
+    if (status === 'Running' || status === 'In Progress') {
       const nowMs = currentTimeMs + serverOffsetRef.current;
       const rawElapsed = Math.max(0, Math.floor((nowMs - startMs) / 1000));
       return Math.max(0, rawElapsed - pausedSeconds);
@@ -464,7 +466,7 @@ export default function KevalDashboard() {
 
       switch (activeKpiFilter) {
         case 'running':
-          return status === 'running';
+          return status === 'running' || status === 'in progress';
         case 'waiting':
           return status === 'draft' || status === 'scheduled';
         case 'paused':
@@ -480,7 +482,7 @@ export default function KevalDashboard() {
         case 'variance':
           return j.varianceSeconds > 0;
         case 'active_workers':
-          return status === 'running' && !!j.currentWorkerName;
+          return (status === 'running' || status === 'in progress') && !!j.currentWorkerName;
         case 'all':
         default:
           return true;
@@ -822,7 +824,7 @@ export default function KevalDashboard() {
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gradient-to-r from-slate-50 via-white to-slate-50/60">
           <div>
             <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-bold text-slate-900 tracking-tight">Live Active Jobs & Handover Station</h2>
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">Live Active Jobs & Planning Control Center</h2>
               <span className="px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 text-xs font-bold border border-blue-200/60">
                 {filteredJobs.length} {filteredJobs.length === 1 ? 'Job' : 'Jobs'}
               </span>
@@ -887,7 +889,7 @@ export default function KevalDashboard() {
               ) : (
                 filteredJobs.map((j) => {
                   const elapsedSeconds = getJobElapsedSeconds(j);
-                  const isRunning = j.status === 'Running';
+                  const isRunning = j.status === 'Running' || j.status === 'In Progress';
                   const isPaused = j.status === 'Paused';
                   const isCompleted = j.status === 'Completed';
                   const isDraft = j.status === 'Draft' || j.status === 'Scheduled';
@@ -1126,128 +1128,6 @@ export default function KevalDashboard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 4: EMBEDDED OPERATIONAL ANALYTICS GRAPHS (RECHARTS)               */}
-      {/* ========================================================================= */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-          <BarChart3 size={16} className="text-blue-600" />
-          <span>Operational Analytics & Capacity Distribution (Recharts)</span>
-        </h2>
-
-        {/* 2-Column Row 1: Planned vs Actual & Delay Bottlenecks */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 1. Planned vs Actual Duration */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">1. Planned vs. Actual Duration (Hours)</h3>
-                <p className="text-xs text-slate-500">Compares budgeted estimate vs floor execution time</p>
-              </div>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={plannedVsActual} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="jobNo" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                  <Bar dataKey="estimatedHours" name="Estimated Budget (hrs)" fill="#93c5fd" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="actualHours" name="Actual Logged (hrs)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* 2. Delay & Bottleneck Breakdown */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">2. Delay & Bottleneck Breakdown</h3>
-                <p className="text-xs text-slate-500">Active working vs pause holds vs schedule overrun</p>
-              </div>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={bottlenecks.length > 0 ? bottlenecks : plannedVsActual}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="jobNo" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                  <Bar dataKey="activeHours" name="Active Time (hrs)" fill="#10b981" stackId="a" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="pauseHours" name="Pause Holds (hrs)" fill="#f59e0b" stackId="a" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="overrunHours" name="Overrun Lag (hrs)" fill="#ef4444" stackId="a" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        {/* 2-Column Row 2: Department Workload & Flow Velocity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 3. Department Workload */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">3. Department Workload & Queue Distribution</h3>
-                <p className="text-xs text-slate-500">Active, paused, scheduled and completed per department</p>
-              </div>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={workload} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                  <Bar dataKey="active" name="Active Running" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="paused" name="Paused" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="scheduled" name="Queued" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="completed" name="Completed" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* 4. Production Flow Velocity */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">4. Production Flow Stage Velocity</h3>
-                <p className="text-xs text-slate-500">Average stage turnaround hours vs target benchmarks</p>
-              </div>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={flowVelocity} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="stage" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                  <Bar dataKey="targetHours" name="Target Benchmark (hrs)" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="avgHours" name="Actual Average (hrs)" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
       {/* SECTION 5: REAL-TIME TOAST NOTIFICATIONS (OVERLAY)                        */}
       {/* ========================================================================= */}
       <div className="fixed bottom-6 right-6 z-50 space-y-2 max-w-sm pointer-events-none">
@@ -1401,7 +1281,7 @@ export default function KevalDashboard() {
                   <ArrowRightLeft size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Worker Shift Handover Station</h3>
+                  <h3 className="font-bold text-slate-900 text-base">Worker Shift Handover</h3>
                   <p className="text-xs text-slate-500">
                     Job {handoverJob.jobNo} — {handoverJob.panelName || 'Panel'}
                   </p>

@@ -1,5 +1,8 @@
-import os
-from pydantic_settings import BaseSettings
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Job Planning & Tracking Register API"
@@ -10,8 +13,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    class Config:
-        env_file = ".env"
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=(str(ENV_FILE), ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 settings = Settings()

@@ -9,12 +9,21 @@ from app.api.v1.export import router as export_router
 from app.api.v1.job_execution import router as execution_router
 from app.api.v1.job_monitoring import router as monitoring_router
 from app.api.v1.job_analytics import router as analytics_router
+from app.api.v1.job_handover import router as handover_router
+from app.api.v1.admin_dashboard import router as admin_dashboard_router
+from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI(
     title="Job Planning & Tracking Register API",
     description="Python FastAPI + PostgreSQL backend for Job Planning & Tracking Register",
     version="2.0.0"
 )
+
+# Static Files for Uploads
+uploads_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+os.makedirs(uploads_path, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
 
 # CORS
 app.add_middleware(
@@ -31,10 +40,12 @@ app.include_router(departments_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(clients_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
+app.include_router(handover_router, prefix="/api")
 app.include_router(export_router, prefix="/api")
 app.include_router(execution_router, prefix="/api")
 app.include_router(monitoring_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
+app.include_router(admin_dashboard_router, prefix="/api")
 
 @app.get("/api/health")
 async def health_check():

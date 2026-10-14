@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import Sidebar from '../components/Sidebar';
 import {
   LayoutDashboard, PlusCircle, Briefcase,
-  FileBarChart, User, LogOut, Activity, FileText
+  FileBarChart, User, LogOut, Activity, FileText,
+  UserCheck, ArrowRightLeft, ShieldCheck, History
 } from 'lucide-react';
 
 const DEPT_DISPLAY_NAMES = {
@@ -21,10 +23,42 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [pendingHandoverCount, setPendingHandoverCount] = useState(0);
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('job_planning_sidebar_collapsed') === 'true';
   });
+
+  const primaryDept = user?.departments?.[0] || 'admin';
+  const deptName = user?.role === 'admin' || user?.role === 'executive'
+    ? 'Administrator'
+    : DEPT_DISPLAY_NAMES[primaryDept] || primaryDept;
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || user?.username?.toLowerCase() === 'keval v shah';
+
+  const [overdueJobCount, setOverdueJobCount] = useState(0);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const [handoverRes, kpiRes] = await Promise.allSettled([
+          api.get('/jobs/handovers/stats'),
+          isAdmin ? api.get('/admin/dashboard/kpis') : Promise.resolve({ data: null })
+        ]);
+        if (handoverRes.status === 'fulfilled' && handoverRes.value.data?.pendingReview !== undefined) {
+          setPendingHandoverCount(handoverRes.value.data.pendingReview);
+        }
+        if (kpiRes.status === 'fulfilled' && kpiRes.value?.data?.overdueJobs !== undefined) {
+          setOverdueJobCount(kpiRes.value.data.overdueJobs);
+        }
+      } catch (e) {
+        // quiet error
+      }
+    }
+    loadStats();
+    const interval = setInterval(loadStats, 30000);
+    return () => clearInterval(interval);
+  }, [isAdmin]);
 
   const toggleCollapse = () => {
     setIsCollapsed((prev) => {
@@ -39,20 +73,23 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const primaryDept = user?.departments?.[0] || 'admin';
-  const deptName = user?.role === 'admin' || user?.role === 'executive'
-    ? 'Administrator'
-    : DEPT_DISPLAY_NAMES[primaryDept] || primaryDept;
-
-  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || user?.username?.toLowerCase() === 'keval v shah';
-
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { to: '/jobs/new', label: 'New Job', icon: <PlusCircle size={20} /> },
+    { to: '/my-jobs', label: 'My Jobs', icon: <UserCheck size={20} /> },
+    { to: '/jobs/handover', label: 'Planning Control Center', icon: <ArrowRightLeft size={20} />, badge: pendingHandoverCount },
     { to: '/jobs', label: 'View Jobs', icon: <Briefcase size={20} /> },
   ];
 
   if (isAdmin) {
+    navItems.push({ 
+      to: '/admin/dashboard', 
+      label: 'Job Late for Users', 
+      icon: <ShieldCheck size={20} />,
+      badge: overdueJobCount > 0 ? overdueJobCount : undefined,
+      badgeColor: 'bg-rose-600 text-white'
+    });
+    navItems.push({ to: '/live-activity', label: 'Live Activity', icon: <History size={20} /> });
     navItems.push({ to: '/live-monitor', label: 'Live Monitor & Analytics', icon: <Activity size={20} /> });
   }
 

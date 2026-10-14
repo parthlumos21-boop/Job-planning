@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { ArrowLeft, Save, Loader2, Search, Filter, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Search, Filter, Plus, Minus, Send } from 'lucide-react';
 import { DEPARTMENT_USER_OPTIONS } from './departmentUserOptions';
+import SearchableUserSelect from './SearchableUserSelect';
 import {
   CUSTOMER_NAME_OPTIONS,
   INDUSTRY_OPTIONS,
@@ -110,6 +111,7 @@ const EMPTY_CORE = {
   projectName: '',
   clientName: '',
   responsibleEnggName: '',
+  assignedEngineerId: '',
   poDate: '',
   dataGivenToDesign: '',
   typeOfIndustries: '',
@@ -161,6 +163,7 @@ const marketingCoreFromJob = (job) => {
     projectName: firstValue(job?.projectName, valueByAliases(marketing, ['Project Name'])),
     clientName: firstValue(job?.clientName, valueByAliases(marketing, ['Customer Name', 'Client Name'])),
     responsibleEnggName: firstValue(job?.responsibleEnggName, valueByAliases(marketing, ['Responsible Engg. Name', 'Responsible Engineer'])),
+    assignedEngineerId: job?.assignedEngineerId || '',
     poDate: normalizeDateValue(firstValue(job?.poDate, valueByAliases(marketing, ['Purchase Order Date']))),
     dataGivenToDesign: normalizeDateValue(firstValue(job?.dataGivenToDesign, valueByAliases(marketing, ['Data Given To Design', 'Data Given To Design Dept.']))),
     typeOfIndustries: firstValue(job?.typeOfIndustries, valueByAliases(marketing, ['Type of Industries', 'Industry Type'])),
@@ -232,6 +235,7 @@ export default function NewJobForm() {
   const { id } = useParams();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const submittingRef = useRef(false);
   
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -241,9 +245,10 @@ export default function NewJobForm() {
 
   const primaryDept = user?.departments?.[0] || 'marketing';
   const deptName = user?.role === 'admin' ? 'Administrator' : primaryDept;
-  const showAllForms = user?.username?.toLowerCase() === 'keval v shah' || user?.role === 'admin';
+  const showAllForms = user?.username?.toLowerCase() === 'keval v shah' || user?.role === 'admin' || user?.role === 'executive';
   const isKeval = user?.username?.toLowerCase() === 'keval v shah';
   const isMarketingOrAdmin = primaryDept === 'marketing' || user?.role === 'admin' || user?.role === 'executive' || showAllForms;
+  const canEditCore = isMarketingOrAdmin;
 
   useEffect(() => {
     if (!isMarketingOrAdmin) {
@@ -433,30 +438,19 @@ export default function NewJobForm() {
     return true;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, shouldSubmitHandover = false) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (submittingRef.current || saving) return;
     setSubmitAttempted(true);
     setError('');
     if (!validateRequiredFields()) return;
     setSaving(true);
+    submittingRef.current = true;
 
     try {
-      if (isMarketingOrAdmin) {
-        const targetDepartment = primaryDept === 'admin' ? 'marketing' : primaryDept;
-        const allDepartmentsData = buildDepartmentPayload(deptFields, targetDepartment, showAllForms);
-        const res = await api.post('/jobs', {
-          ...core,
-          date: new Date().toISOString().split('T')[0],
-          targetDepartment,
-          allDepartmentsData
-        });
-        navigate(isKeval ? '/jobs/257' : `/jobs/${res.data.id}`);
-      } else {
-        if (!selectedJobId) {
-          setError('Please select a job first');
-          setSaving(false);
-          return;
-        }
+      let savedJobId;
+      if (selectedJobId) {
+        savedJobId = selectedJobId;
         for (const [field, value] of Object.entries(deptFields)) {
           await api.patch(`/jobs/${selectedJobId}/field`, {
             department: primaryDept,
@@ -464,11 +458,38 @@ export default function NewJobForm() {
             value
           });
         }
-        navigate(isKeval ? '/jobs/257' : `/jobs/${selectedJobId}`);
+      } else {
+        const targetDepartment = primaryDept === 'admin' ? 'marketing' : primaryDept;
+        const allDepartmentsData = buildDepartmentPayload(deptFields, targetDepartment, true);
+        const res = await api.post('/jobs', {
+          ...core,
+          date: new Date().toISOString().split('T')[0],
+          targetDepartment,
+          allDepartmentsData
+        });
+        savedJobId = res.data?.id || res.data?.external_id;
+      }
+
+      if (shouldSubmitHandover && savedJobId) {
+        await api.post(`/jobs/${savedJobId}/handover/submit`, {
+          targetDepartment: 'planning',
+          fromDepartment: primaryDept,
+          checklist: {
+            coreVerified: true,
+            poVerified: true,
+            engineerAssigned: Boolean(core.responsibleEnggName)
+          },
+          notes: 'Submitted for Planning from Job Form'
+        });
+        navigate('/jobs/handover');
+      } else {
+        navigate(`/jobs/${savedJobId}`);
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save job');
+      console.error(err);
+      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to save job');
       setSaving(false);
+      submittingRef.current = false;
     }
   };
 
@@ -517,95 +538,145 @@ export default function NewJobForm() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Job Selection for Non-Marketing */}
-        {!isMarketingOrAdmin && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
-            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-              <h3 className="text-lg font-bold text-gray-900">Select Existing Job</h3>
-              <p className="text-sm text-gray-500">Only Marketing can create new jobs. Select a job to add your department's details.</p>
+        {/* Job Selection / Mode for All Departments */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+          <div className="px-6 py-3 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Job Mode: Create New or Select Existing</h3>
+              <p className="text-xs text-slate-500">All authorized departments can create new jobs or select an existing job to update details.</p>
             </div>
-            <div className="p-6">
-              <select value={selectedJobId} onChange={handleJobSelect} className={`${selectClass} ${submitAttempted && missingRequired.has('job:selectedJobId') ? 'border-red-400 ring-1 ring-red-300' : ''}`}>
-                <option value="">-- Select Job No. --</option>
-                {jobs.map(j => (
-                  <option key={j.id} value={j.id}>
-                    {j.jobNo} - {j.panelName} — Responsible: {j.responsibleEnggName || 'N/A'}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {selectedJobId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedJobId('');
+                  setCore(EMPTY_CORE);
+                  setDeptFields({});
+                }}
+                className="text-xs text-blue-600 hover:text-blue-700 font-semibold underline self-start sm:self-auto"
+              >
+                + Switch to Create New Job
+              </button>
+            )}
           </div>
-        )}
+          <div className="p-4 bg-slate-50/50">
+            <select value={selectedJobId} onChange={handleJobSelect} className={selectClass}>
+              <option value="">-- [Create New Job] or Select Existing Job to Update --</option>
+              {jobs.map(j => (
+                <option key={j.id} value={j.id}>
+                  #{j.jobNo} - {j.panelName} ({j.clientName || 'General Client'}) — Responsible: {j.responsibleEnggName || 'N/A'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         {/* Core Job Details */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-blue-50">
-            <h3 className="text-lg font-bold text-blue-900">Core Job Details { !isMarketingOrAdmin && "(Read-Only)" }</h3>
+          <div className="px-6 py-4 border-b border-gray-200 bg-blue-50 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-blue-900">Core Job Details</h3>
+            <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+              canEditCore ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {canEditCore ? 'Editable (Marketing / Admin)' : 'Read-Only (Managed by Marketing)'}
+            </span>
           </div>
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div>
-              <label className={requiredLabelClass('core:jobNo')}>Job Number {requiredMark}</label>
-              <input required={isMarketingOrAdmin} readOnly={!isMarketingOrAdmin} value={core.jobNo} onChange={e => handleCoreChange('jobNo', e.target.value)} className={`${inputClass} ${!isMarketingOrAdmin ? 'bg-gray-100' : ''}`} />
+              <label className={canEditCore ? requiredLabelClass('core:jobNo') : labelClass}>
+                Job Number {canEditCore && requiredMark}
+              </label>
+              {canEditCore ? (
+                <input required value={core.jobNo} onChange={e => handleCoreChange('jobNo', e.target.value)} className={inputClass} placeholder="e.g. RA101/01" />
+              ) : (
+                <input type="text" readOnly value={core.jobNo || '—'} className={`${inputClass} bg-gray-100 font-medium text-gray-800 cursor-not-allowed outline-none select-all`} />
+              )}
             </div>
             <div>
-              <label className={requiredLabelClass('core:panelName')}>Panel Name {requiredMark}</label>
-              {isMarketingOrAdmin ? (
+              <label className={canEditCore ? requiredLabelClass('core:panelName') : labelClass}>
+                Panel Name {canEditCore && requiredMark}
+              </label>
+              {canEditCore ? (
                 <select required value={core.panelName} onChange={e => handleCoreChange('panelName', e.target.value)} className={selectClass}>
                   <option value="">Select...</option>
                   {PANEL_NAME_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               ) : (
-                <input readOnly value={core.panelName} className={`${inputClass} bg-gray-100 outline-none`} />
+                <input type="text" readOnly value={core.panelName || '—'} className={`${inputClass} bg-gray-100 font-medium text-gray-800 cursor-not-allowed outline-none`} />
               )}
             </div>
-            {isMarketingOrAdmin && (
-              <div>
-                <label className={labelClass}>Quantity</label>
-                <input type="number" value={core.qty} onChange={e => handleCoreChange('qty', e.target.value)} className={inputClass} />
-              </div>
-            )}
             <div>
-              <label className={requiredLabelClass('core:typeOfIndustries')}>Industry Type {requiredMark}</label>
-              {isMarketingOrAdmin ? (
+              <label className={labelClass}>Quantity</label>
+              {canEditCore ? (
+                <input type="number" value={core.qty} onChange={e => handleCoreChange('qty', e.target.value)} className={inputClass} />
+              ) : (
+                <input type="text" readOnly value={core.qty || '1'} className={`${inputClass} bg-gray-100 font-medium text-gray-800 cursor-not-allowed outline-none`} />
+              )}
+            </div>
+            <div>
+              <label className={canEditCore ? requiredLabelClass('core:typeOfIndustries') : labelClass}>
+                Industry Type {canEditCore && requiredMark}
+              </label>
+              {canEditCore ? (
                 <select required value={core.typeOfIndustries} onChange={e => handleCoreChange('typeOfIndustries', e.target.value)} className={selectClass}>
                   <option value="">Select...</option>
                   {INDUSTRY_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               ) : (
-                <input readOnly value={core.typeOfIndustries} className={`${inputClass} bg-gray-100 outline-none`} />
+                <input type="text" readOnly value={core.typeOfIndustries || '—'} className={`${inputClass} bg-gray-100 font-medium text-gray-800 cursor-not-allowed outline-none`} />
               )}
             </div>
             <div>
-              <label className={requiredLabelClass('core:projectName')}>Project Name {requiredMark}</label>
-              <input required={isMarketingOrAdmin} readOnly={!isMarketingOrAdmin} value={core.projectName} onChange={e => handleCoreChange('projectName', e.target.value)} className={`${inputClass} ${!isMarketingOrAdmin ? 'bg-gray-100' : ''}`} />
+              <label className={canEditCore ? requiredLabelClass('core:projectName') : labelClass}>
+                Project Name {canEditCore && requiredMark}
+              </label>
+              {canEditCore ? (
+                <input required value={core.projectName} onChange={e => handleCoreChange('projectName', e.target.value)} className={inputClass} placeholder="Project Name" />
+              ) : (
+                <input type="text" readOnly value={core.projectName || '—'} className={`${inputClass} bg-gray-100 font-medium text-gray-800 cursor-not-allowed outline-none select-all`} />
+              )}
             </div>
-            {isMarketingOrAdmin && (
-              <>
-                <div>
-                  <label className={labelClass}>Customer Name</label>
-                  <select value={core.clientName} onChange={e => handleCoreChange('clientName', e.target.value)} className={selectClass}>
-                    <option value="">Select...</option>
-                    {CUSTOMER_NAME_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClass}>Panel Type</label>
-                  <select value={core.typeOfPanel} onChange={e => handleCoreChange('typeOfPanel', e.target.value)} className={selectClass}>
-                    <option value="">Select...</option>
-                    {PANEL_TYPE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                </div>
-              </>
-            )}
             <div>
-              <label className={requiredLabelClass('core:responsibleEnggName')}>Responsible Engineer {requiredMark}</label>
-              {isMarketingOrAdmin ? (
-                <select required value={core.responsibleEnggName} onChange={e => handleCoreChange('responsibleEnggName', e.target.value)} className={selectClass}>
+              <label className={labelClass}>Customer Name</label>
+              {canEditCore ? (
+                <select value={core.clientName} onChange={e => handleCoreChange('clientName', e.target.value)} className={selectClass}>
                   <option value="">Select...</option>
-                  {DEPARTMENT_USER_OPTIONS.marketing.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  {CUSTOMER_NAME_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               ) : (
-                <input readOnly value={core.responsibleEnggName} className={`${inputClass} bg-gray-100 outline-none`} />
+                <input type="text" readOnly value={core.clientName || '—'} className={`${inputClass} bg-gray-100 font-medium text-gray-800 cursor-not-allowed outline-none`} />
+              )}
+            </div>
+            <div>
+              <label className={labelClass}>Panel Type</label>
+              {canEditCore ? (
+                <select value={core.typeOfPanel} onChange={e => handleCoreChange('typeOfPanel', e.target.value)} className={selectClass}>
+                  <option value="">Select...</option>
+                  {PANEL_TYPE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              ) : (
+                <input type="text" readOnly value={core.typeOfPanel || '—'} className={`${inputClass} bg-gray-100 font-medium text-gray-800 cursor-not-allowed outline-none`} />
+              )}
+            </div>
+            <div>
+              <label className={canEditCore ? requiredLabelClass('core:responsibleEnggName') : labelClass}>
+                Responsible Engineer {canEditCore && requiredMark}
+              </label>
+              {canEditCore ? (
+                <SearchableUserSelect
+                  value={core.responsibleEnggName}
+                  assignedId={core.assignedEngineerId}
+                  placeholder="Search active engineer..."
+                  onChange={(name, id) => {
+                    handleCoreChange('responsibleEnggName', name);
+                    handleCoreChange('assignedEngineerId', id);
+                  }}
+                />
+              ) : (
+                <div className="mt-1 flex items-center gap-2 px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-800 font-medium cursor-not-allowed">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>{core.responsibleEnggName || 'Not Assigned'}</span>
+                </div>
               )}
             </div>
             {isMarketingOrAdmin && (
@@ -1199,14 +1270,28 @@ export default function NewJobForm() {
           </div>
         )}
 
-        {/* Submit */}
-        <div className="flex justify-end space-x-3">
-          <button type="button" onClick={() => navigate('/')} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+        {/* Submit Actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-200">
+          <button type="button" onClick={() => navigate(-1)} className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors text-sm">
             Cancel
           </button>
-          <button type="submit" disabled={saving} className="flex items-center space-x-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm">
-            {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
-            <span>{saving ? 'Saving...' : 'Save New Job'}</span>
+          <button
+            type="button"
+            onClick={(e) => handleSubmit(e, false)}
+            disabled={saving}
+            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-2.5 bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-900 disabled:opacity-50 transition-colors shadow-sm text-sm"
+          >
+            {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+            <span>{saving ? 'Saving...' : 'Save Job Draft'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleSubmit(e, true)}
+            disabled={saving}
+            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-semibold disabled:opacity-50 transition-all shadow-md shadow-blue-500/20 text-sm hover:scale-[1.02] active:scale-[0.98]"
+          >
+            {saving ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+            <span>Save & Submit to Planning</span>
           </button>
         </div>
       </form>

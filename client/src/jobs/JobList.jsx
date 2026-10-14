@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { FileText, Loader2, Search, ChevronLeft, ChevronRight, X, ExternalLink, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { FileText, Loader2, Search, ChevronLeft, ChevronRight, X, ExternalLink, CheckCircle2, Clock, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import ExcelTable from '../components/ExcelTable';
 import { DEPARTMENT_PROGRESS } from './jobProgress';
+import DepartmentHandoverModal from './DepartmentHandoverModal';
 
 export default function JobList({ title }) {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function JobList({ title }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedJob, setSelectedJob] = useState(null);
+  const [showHandoverModal, setShowHandoverModal] = useState(false);
   
   const [currentPage, setCurrentPage] = useState(1);
   const jobsPerPage = 10;
@@ -196,7 +198,14 @@ export default function JobList({ title }) {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowHandoverModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-all"
+              >
+                <ArrowRightLeft size={14} />
+                <span>Planning Control Center</span>
+              </button>
               <Link
                 to={`/jobs/${selectedJob.id || selectedJob._id || selectedJob.externalId}`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
@@ -266,6 +275,21 @@ export default function JobList({ title }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Universal Handover Modal */}
+      {showHandoverModal && selectedJob && (
+        <DepartmentHandoverModal
+          job={selectedJob}
+          isOpen={showHandoverModal}
+          onClose={() => setShowHandoverModal(false)}
+          onHandoverSuccess={(updatedJob) => {
+            if (updatedJob) {
+              setSelectedJob(updatedJob);
+              setJobs(prev => prev.map(j => ((j.id || j.externalId) === (updatedJob.id || updatedJob.externalId) ? { ...j, ...updatedJob } : j)));
+            }
+          }}
+        />
       )}
     </div>
   );

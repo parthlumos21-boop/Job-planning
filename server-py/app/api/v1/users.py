@@ -33,7 +33,9 @@ async def get_users(
             "name": u.name,
             "username": u.name,
             "departments": depts,
-            "jobCount": 0
+            "jobCount": 0,
+            "userType": "user",
+            "uniqueKey": f"user_{u.id}_{u.name}"
         })
 
     # Also include Accounts that might not be in users table
@@ -53,7 +55,9 @@ async def get_users(
             "name": a.username,
             "username": a.username,
             "departments": depts,
-            "jobCount": 0
+            "jobCount": 0,
+            "userType": "account",
+            "uniqueKey": f"account_{a.id}_{a.username}"
         })
 
     return output

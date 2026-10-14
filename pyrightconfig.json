@@ -3,9 +3,13 @@
     "server-py"
   ],
   "exclude": [
-    "**/node_modules"
+    "**/node_modules",
+    "**/venv"
   ],
   "extraPaths": [
-    "server-py"
-  ]
+    "server-py",
+    "server-py/venv/Lib/site-packages"
+  ],
+  "venvPath": "server-py",
+  "venv": "venv"
 }

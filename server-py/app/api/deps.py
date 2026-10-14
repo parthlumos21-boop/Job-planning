@@ -26,7 +26,9 @@ async def get_current_user(
     return UserPayload(
         username=payload.get("username", ""),
         role=payload.get("role", "user"),
-        departments=payload.get("departments", [])
+        departments=payload.get("departments", []),
+        name=payload.get("name") or payload.get("username", ""),
+        id=payload.get("id")
     )
 
 def is_admin_or_keval(user: UserPayload) -> bool:

@@ -1,11 +1,12 @@
 {
-  "python.defaultInterpreterPath": "./server-py/venv/Scripts/python.exe",
+  "python.defaultInterpreterPath": "${workspaceFolder}/server-py/venv/Scripts/python.exe",
+  "python.envFile": "${workspaceFolder}/server-py/.env",
   "python.analysis.extraPaths": [
-    "./server-py",
-    "./server-py/venv/Lib/site-packages"
+    "${workspaceFolder}/server-py",
+    "${workspaceFolder}/server-py/venv/Lib/site-packages"
   ],
   "python.autoComplete.extraPaths": [
-    "./server-py",
-    "./server-py/venv/Lib/site-packages"
+    "${workspaceFolder}/server-py",
+    "${workspaceFolder}/server-py/venv/Lib/site-packages"
   ]
 }

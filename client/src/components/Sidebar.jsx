@@ -128,12 +128,21 @@ export default function Sidebar({
                     {item.icon}
                   </span>
                   {isExpanded && (
-                    <span className="truncate whitespace-nowrap tracking-wide">
+                    <span className="truncate whitespace-nowrap tracking-wide flex-1">
                       {item.label}
                     </span>
                   )}
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className={`rounded-full font-bold transition-all ${
+                      isExpanded
+                        ? 'px-2 py-0.5 text-[10px] bg-amber-500 text-slate-950 font-black ml-auto shadow-sm'
+                        : 'absolute -top-1 -right-1 w-4 h-4 p-0 flex items-center justify-center bg-amber-500 text-slate-950 text-[9px] shadow-md ring-2 ring-slate-900'
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
                   {/* Subtle active dot indicator when in compact rail mode */}
-                  {!isExpanded && active && (
+                  {!isExpanded && active && !item.badge && (
                     <span className="absolute right-1 w-1.5 h-1.5 rounded-full bg-white shadow-sm"></span>
                   )}
                 </Link>

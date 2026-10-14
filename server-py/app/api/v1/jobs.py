@@ -79,7 +79,7 @@ def format_job_row(j: Job, department: str | None = None) -> dict:
         "targetPosition": j.target_position or "",
         "visibleToDepartments": j.visible_to_departments or visible_departments_for_job(j),
         "departmentStatus": j.department_status or {},
-        "selected": bool(j.selected),
+        "selected": j.selected or False,
         "departmentFields": fields_dict.get(department, {}) if department else None,
         "marketingFields": fields_dict.get("marketing", {}),
         "engineers": display_engs,
@@ -94,9 +94,29 @@ def format_job_row(j: Job, department: str | None = None) -> dict:
         "totalPausedSeconds": j.total_paused_seconds or 0,
         "pauseStartedAt": j.pause_started_at.isoformat() if j.pause_started_at else None,
         "actualDurationSeconds": j.actual_duration_seconds or 0,
-        "progressPercentage": float(j.progress_percentage or 0.0),
+        "progressPercentage": float(getattr(j, "progress_percentage", 0.0) or 0.0),
         "priority": j.priority or "Normal",
         "assignedEngineerId": j.assigned_engineer_id,
+        "currentWorkerId": j.current_worker_id,
+        "currentWorkerPosition": j.current_worker_position or "",
+        "handoverStatus": j.handover_status or "Draft",
+        "planningOwnerId": j.planning_owner_id,
+        "planningOwnerName": j.planning_owner_name or "",
+        "handoverSubmittedAt": j.handover_submitted_at.isoformat() if j.handover_submitted_at else None,
+        "handoverAcceptedAt": j.handover_accepted_at.isoformat() if j.handover_accepted_at else None,
+        "handoverReturnReason": j.handover_return_reason or "",
+        "handoverChecklist": j.handover_checklist or {},
+        "attachments": j.attachments or [],
+        "currentStage": getattr(j, "current_stage", "INCOMING") or "INCOMING",
+        "currentAction": getattr(j, "current_action", "Review Incoming Job") or "Review Incoming Job",
+        "currentWaitingReason": getattr(j, "current_waiting_reason", "") or "",
+        "stageStartedAt": j.stage_started_at.isoformat() if getattr(j, "stage_started_at", None) else None,
+        "stageDueDate": j.stage_due_date.isoformat() if getattr(j, "stage_due_date", None) else None,
+        "assignmentReasonCategory": getattr(j, "assignment_reason_category", "") or "",
+        "assignmentExplanation": getattr(j, "assignment_explanation", "") or "",
+        "forwardingReasonCategory": getattr(j, "forwarding_reason_category", "") or "",
+        "forwardingNote": getattr(j, "forwarding_note", "") or "",
+        "stageDurations": getattr(j, "stage_durations", {}) or {},
     }
 
 # GET /api/jobs/stats
@@ -192,14 +212,17 @@ async def create_job(
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(get_current_user)
 ):
-    if user.role not in ["admin", "executive"] and not is_keval(user):
-        if "marketing" not in user.departments:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admins and marketing can create jobs"
-            )
-
     body = await request.json()
+
+    raw_job_no = str(body.get("jobNo", "")).strip()
+    if raw_job_no:
+        dup_stmt = select(Job).where(func.lower(Job.job_no) == raw_job_no.lower())
+        existing = (await db.execute(dup_stmt)).scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Job #{raw_job_no} already exists in the system (Panel: '{existing.panel_name}'). Please choose a unique Job Number or edit the existing job."
+            )
 
     # Determine next external_id
     max_id_res = await db.execute(select(func.max(Job.external_id)))
@@ -223,16 +246,20 @@ async def create_job(
         panel_name=body.get("panelName", ""),
         project_name=body.get("projectName", ""),
         responsible_engg_name=body.get("responsibleEnggName", ""),
-        poNo=body.get("poNo", ""),
-        poDate=body.get("poDate", ""),
-        deliveryPeriod=body.get("deliveryPeriod", ""),
-        deliveryDate=body.get("deliveryDate", ""),
-        dataGivenToDesign=body.get("dataGivenToDesign", ""),
-        deliveryAddress=body.get("deliveryAddress", ""),
-        contactPerson=body.get("contactPerson", ""),
-        typeOfIndustries=body.get("typeOfIndustries", ""),
-        incomerRating=body.get("incomerRating", ""),
-        typeOfPanel=body.get("typeOfPanel", ""),
+        assigned_engineer_id=body.get("assignedEngineerId"),
+        handover_status=body.get("handoverStatus", "Draft"),
+        handover_checklist=body.get("handoverChecklist", {}),
+        attachments=body.get("attachments", []),
+        po_no=body.get("poNo") or body.get("po_no") or "",
+        po_date=body.get("poDate") or body.get("po_date") or "",
+        delivery_period=body.get("deliveryPeriod") or body.get("delivery_period") or "",
+        delivery_date=body.get("deliveryDate") or body.get("delivery_date") or "",
+        data_given_to_design=body.get("dataGivenToDesign") or body.get("data_given_to_design") or "",
+        delivery_address=body.get("deliveryAddress") or body.get("delivery_address") or "",
+        contact_person=body.get("contactPerson") or body.get("contact_person") or "",
+        type_of_industries=body.get("typeOfIndustries") or body.get("type_of_industries") or "",
+        incomer_rating=body.get("incomerRating") or body.get("incomer_rating") or "",
+        type_of_panel=body.get("typeOfPanel") or body.get("type_of_panel") or "",
         qty=str(body.get("qty", "1")),
         date=body.get("date", ""),
         ttl=body.get("ttl", ""),
@@ -349,8 +376,17 @@ async def patch_job_field(
 
     target_dept = "marketing" if req.department == "marketing-lock" else req.department
 
-    if req.department == "core" and not can_manage_core(user):
-        raise HTTPException(status_code=403, detail="Only admins and marketing can edit core fields")
+    user_depts = set(user.departments or [])
+    is_admin = user.role in ["admin", "executive"] or is_keval(user)
+
+    if (target_dept in ["core", "marketing"] or req.department in ["core", "marketing"]) and not can_manage_core(user):
+        raise HTTPException(status_code=403, detail="Only admins and marketing can edit core and marketing fields")
+
+    if not is_admin and target_dept not in ["core", "marketing"] and target_dept not in user_depts:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Forbidden: You are not authorized to update fields in the '{target_dept}' department"
+        )
 
     current_fields = dict(job.fields or {})
     dept_fields = dict(current_fields.get(target_dept, {}))

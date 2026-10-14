@@ -1,11 +1,12 @@
 import asyncio
 from datetime import datetime, timezone, timedelta
+from typing import Any
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func
 from app.db.session import get_db
-from app.api.deps import require_admin
+from app.api.deps import require_admin, get_current_user
 from app.models import Job, User
 from app.schemas import UserPayload
 from app.core.events import broadcaster
@@ -76,13 +77,13 @@ async def get_running_jobs(
     # Fetch users catalog map for assigned engineers
     u_stmt = select(User)
     u_res = await db.execute(u_stmt)
-    users_map = {u.id: u.name for u in u_res.scalars().all()}
+    users_map: dict[Any, Any] = {u.id: u.name for u in u_res.scalars().all()}
 
     output = []
     for j in all_jobs:
         metrics = compute_job_time_metrics(j, now)
-        assigned_name = users_map.get(j.assigned_engineer_id, j.responsible_engg_name or "Unassigned")
-        current_worker_name = users_map.get(j.current_worker_id, assigned_name)
+        assigned_name = users_map.get(j.assigned_engineer_id) or j.planning_owner_name or j.responsible_engg_name or "Unassigned"
+        current_worker_name = users_map.get(j.current_worker_id) or j.planning_owner_name or assigned_name
         prev_worker_name = users_map.get(j.previous_worker_id, "—") if j.previous_worker_id else "—"
         next_worker_name = users_map.get(j.next_worker_id, "Not yet assigned") if j.next_worker_id else "Not yet assigned"
 
@@ -136,7 +137,7 @@ async def get_job_timeline(
     # Fetch users catalog map
     u_stmt = select(User)
     u_res = await db.execute(u_stmt)
-    users_map = {u.id: u.name for u in u_res.scalars().all()}
+    users_map: dict[Any, Any] = {u.id: u.name for u in u_res.scalars().all()}
 
     # Fetch sessions
     s_stmt = select(JobExecutionSession).where(
@@ -162,7 +163,7 @@ async def get_job_timeline(
     end_candidates.append(now)
     scale_end = max(end_candidates)
 
-    current_worker_name = users_map.get(job.current_worker_id, job.responsible_engg_name or "Unassigned")
+    current_worker_name = users_map.get(job.current_worker_id) or job.planning_owner_name or job.responsible_engg_name or "Unassigned"
 
     session_blocks = []
     for s in sessions:
@@ -233,7 +234,7 @@ async def get_timeline_overview(
     # 1. Fetch users catalog map
     u_stmt = select(User)
     u_res = await db.execute(u_stmt)
-    users_map = {u.id: u.name for u in u_res.scalars().all()}
+    users_map: dict[Any, Any] = {u.id: u.name for u in u_res.scalars().all()}
 
     # 2. Build Query
     stmt = select(Job)
@@ -354,14 +355,14 @@ async def get_timeline_overview(
     job_items = []
     for j in jobs:
         metrics = compute_job_time_metrics(j, now)
-        assigned_name = users_map.get(j.assigned_engineer_id, j.responsible_engg_name or "Unassigned")
-        current_name = users_map.get(j.current_worker_id, assigned_name)
+        assigned_name = users_map.get(j.assigned_engineer_id) or j.planning_owner_name or j.responsible_engg_name or "Unassigned"
+        current_name = users_map.get(j.current_worker_id) or j.planning_owner_name or assigned_name
         assigned_by = users_map.get(getattr(j, "assigned_by_user_id", None), "Admin")
 
         j_sessions = sessions_by_job.get(j.id, [])
         session_blocks = []
         for s in j_sessions:
-            end_t = s.ended_at or (now if j.lifecycle_status == "Running" else s.started_at)
+            end_t = s.ended_at or (now if j.lifecycle_status in ["Running", "In Progress"] else s.started_at)
             dur = s.duration_seconds if s.ended_at else max(0, int((now - s.started_at).total_seconds()))
             session_blocks.append({
                 "id": s.id,
@@ -438,7 +439,7 @@ async def get_job_timeline_history(
 
     u_stmt = select(User)
     u_res = await db.execute(u_stmt)
-    users_map = {u.id: u.name for u in u_res.scalars().all()}
+    users_map: dict[Any, Any] = {u.id: u.name for u in u_res.scalars().all()}
 
     # Fetch handovers in chronological order
     h_stmt = select(JobHandover).where(
@@ -545,11 +546,11 @@ async def get_job_timeline_history(
         ]
     }
 
-# GET /api/job-monitoring/stream (Admin Only SSE)
+# GET /api/job-monitoring/stream (Authorized Live SSE Stream)
 @router.get("/stream")
 async def live_monitoring_stream(
     request: Request,
-    user: UserPayload = Depends(require_admin)
+    user: UserPayload = Depends(get_current_user)
 ):
     queue = broadcaster.subscribe()
 

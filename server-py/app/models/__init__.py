@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Numeric, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Numeric, func, ForeignKey
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from app.db.base import Base
 
@@ -90,6 +90,28 @@ class Job(Base):
     last_handover_at = Column(DateTime(timezone=True), nullable=True)
     handover_notes = Column(Text, nullable=True)
 
+    # Handover for Planning & Department Workflow
+    handover_status = Column(String(50), default="Draft", index=True)
+    planning_owner_id = Column(Integer, nullable=True, index=True)
+    planning_owner_name = Column(String(255), nullable=True)
+    handover_submitted_at = Column(DateTime(timezone=True), nullable=True)
+    handover_accepted_at = Column(DateTime(timezone=True), nullable=True)
+    handover_return_reason = Column(Text, nullable=True)
+    handover_checklist = Column(JSONB, default=dict)
+    attachments = Column(JSONB, default=list)
+
+    # Control Center Stage & Transition Tracking
+    current_stage = Column(String(50), default="INCOMING", index=True)
+    current_action = Column(String(255), default="Review Incoming Job")
+    current_waiting_reason = Column(Text, nullable=True)
+    stage_started_at = Column(DateTime(timezone=True), server_default=func.now())
+    stage_due_date = Column(DateTime(timezone=True), nullable=True)
+    assignment_reason_category = Column(String(100), nullable=True)
+    assignment_explanation = Column(Text, nullable=True)
+    forwarding_reason_category = Column(String(100), nullable=True)
+    forwarding_note = Column(Text, nullable=True)
+    stage_durations = Column(JSONB, default=dict)
+
     # JSONB columns
     fields = Column(JSONB, default=dict)
     engineers = Column(JSONB, default=dict)
@@ -126,6 +148,9 @@ class JobHandover(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(Integer, nullable=False, index=True)
+    handover_type = Column(String(50), default="SHIFT", index=True) # 'SHIFT' or 'PLANNING' or 'DEPARTMENT'
+    from_department = Column(String(100), nullable=True)
+    to_department = Column(String(100), nullable=True, index=True)
     from_worker_id = Column(Integer, nullable=True)
     from_worker_position = Column(String(100), nullable=True)
     to_worker_id = Column(Integer, nullable=True, index=True)
@@ -134,6 +159,7 @@ class JobHandover(Base):
     reason = Column(String(255), nullable=False)
     notes = Column(Text, nullable=True)
     work_completed_summary = Column(Text, nullable=True)
+    checklist_snapshot = Column(JSONB, nullable=True)
     active_seconds_before_handover = Column(Integer, default=0)
     status_at_handover = Column(String(50), nullable=True)
     progress_at_handover = Column(Numeric(5, 2), nullable=True)
@@ -183,4 +209,86 @@ class SystemConfig(Base):
     departments = Column(JSONB, default=list)
     field_defs = Column(JSONB, default=dict)
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class JobDelayRecord(Base):
+    __tablename__ = "job_delay_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False, index=True)
+    external_job_id = Column(Integer, index=True)
+    
+    # Timeline & Target Dates
+    original_target_date = Column(DateTime(timezone=True), nullable=True)
+    revised_target_date = Column(DateTime(timezone=True), nullable=True)
+    date_delay_identified = Column(DateTime(timezone=True), server_default=func.now())
+    days_overdue = Column(Integer, default=0)
+    workflow_stage_at_delay = Column(String(50), nullable=False)
+    current_department = Column(String(50), nullable=True)
+
+    # Late Reason Details
+    reason_category = Column(String(100), nullable=True)
+    detailed_explanation = Column(Text, nullable=True)
+    explanation_status = Column(String(50), default="REASON_PENDING", index=True)
+    explanation_provider_id = Column(Integer, nullable=True)
+    explanation_provider_name = Column(String(255), nullable=True)
+    explanation_recorded_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Corrective Action & Revision
+    corrective_action_required = Column(Text, nullable=True)
+    revised_expected_date = Column(DateTime(timezone=True), nullable=True)
+    
+    # Admin Review Status
+    admin_review_status = Column(String(50), default="UNREVIEWED", index=True)
+    admin_review_notes = Column(Text, nullable=True)
+    admin_reviewer_id = Column(Integer, nullable=True)
+    admin_reviewer_name = Column(String(255), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class JobAssignmentHistory(Base):
+    __tablename__ = "job_assignment_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False, index=True)
+    change_type = Column(String(50), default="ASSIGNMENT")
+    
+    # Previous & New Owner
+    previous_owner_id = Column(Integer, nullable=True)
+    previous_owner_name = Column(String(255), nullable=True)
+    new_owner_id = Column(Integer, nullable=False)
+    new_owner_name = Column(String(255), nullable=False)
+    
+    # Initiating Actor
+    assigned_by_id = Column(Integer, nullable=False)
+    assigned_by_name = Column(String(255), nullable=False)
+    assigned_by_department = Column(String(100), nullable=True)
+    assigned_by_role = Column(String(50), nullable=True)
+    
+    # Mandatory Rationale
+    reason_category = Column(String(100), nullable=False)
+    detailed_explanation = Column(Text, nullable=False)
+    additional_note = Column(Text, nullable=True)
+    
+    # Milestone Context
+    workflow_stage = Column(String(50), nullable=True)
+    expected_start_date = Column(DateTime(timezone=True), nullable=True)
+    target_completion_date = Column(DateTime(timezone=True), nullable=True)
+    priority = Column(String(50), default="Normal")
+    reassignment_sequence = Column(Integer, default=1)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+class JobTargetDateRevision(Base):
+    __tablename__ = "job_target_date_revisions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False, index=True)
+    previous_target_date = Column(DateTime(timezone=True), nullable=False)
+    revised_target_date = Column(DateTime(timezone=True), nullable=False)
+    reason_category = Column(String(100), nullable=False)
+    revision_rationale = Column(Text, nullable=False)
+    authorized_by_id = Column(Integer, nullable=False)
+    authorized_by_name = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 

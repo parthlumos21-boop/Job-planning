@@ -6,10 +6,14 @@ import Dashboard from './dashboard/Dashboard';
 import JobList from './jobs/JobList';
 import JobDetail from './jobs/JobDetail';
 import NewJobForm from './jobs/NewJobForm';
+import MyJobs from './jobs/MyJobs';
+import PlanningHandoverInbox from './jobs/PlanningHandoverInbox';
 import ChartPage from './reports/ChartPage';
 import Reports from './reports/Reports';
 
 import KevalDashboard from './dashboard/KevalDashboard';
+import AdminOversightDashboard from './dashboard/AdminOversightDashboard';
+import LiveActivityDashboard from './dashboard/LiveActivityDashboard';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -34,12 +38,17 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<Dashboard />} />
+            <Route path="my-jobs" element={<MyJobs />} />
             <Route path="jobs" element={<JobsRoute />} />
+            <Route path="jobs/handover" element={<PlanningHandoverInbox />} />
+            <Route path="jobs/handover/planning" element={<PlanningHandoverInbox />} />
             <Route path="jobs/new" element={<NewJobForm />} />
             <Route path="jobs/edit/:id" element={<NewJobForm />} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="chart" element={<AdminOnlyRoute><ChartPage /></AdminOnlyRoute>} />
+            <Route path="live-activity" element={<AdminOnlyRoute><LiveActivityDashboard /></AdminOnlyRoute>} />
             <Route path="live-monitor" element={<AdminOnlyRoute><KevalDashboard /></AdminOnlyRoute>} />
+            <Route path="admin/dashboard" element={<AdminOnlyRoute><AdminOversightDashboard /></AdminOnlyRoute>} />
             <Route path="reports" element={<Reports />} />
           </Route>
         </Routes>

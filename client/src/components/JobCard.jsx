@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Edit3, Calendar, User, Building, Zap, Layers, CheckCircle2, Clock } from 'lucide-react';
+import { Eye, Edit3, Calendar, User, Building, Zap, Layers, CheckCircle2, Clock, ArrowRightLeft } from 'lucide-react';
 
 const DEPT_SHORT_NAMES = [
   { key: 'marketing', label: 'MKT', name: 'Marketing' },
@@ -10,7 +10,7 @@ const DEPT_SHORT_NAMES = [
   { key: 'dispatch', label: 'DIS', name: 'Dispatch' },
 ];
 
-export default function JobCard({ job, onView, onEdit }) {
+export default function JobCard({ job, onView, onEdit, onHandover }) {
   if (!job) return null;
 
   const deptStatus = job.departmentStatus || {};
@@ -128,6 +128,15 @@ export default function JobCard({ job, onView, onEdit }) {
           <Eye size={13} />
           Details
         </button>
+        {onHandover && (
+          <button
+            onClick={() => onHandover(job)}
+            className="inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/70 transition-colors"
+          >
+            <ArrowRightLeft size={13} />
+            Handover
+          </button>
+        )}
         <button
           onClick={() => onEdit && onEdit(job.id)}
           className="inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 transition-colors"
