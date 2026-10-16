@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import SearchableUserSelect from './SearchableUserSelect';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import {
   X, CheckCircle2, RotateCcw, ArrowRight, FileText,
-  Clock, AlertCircle, Upload, Check, Send, User, ChevronRight, Loader2
+  Clock, AlertCircle, Upload, Check, Send, User, ChevronRight, Loader2, Building2,
+  ArrowRightLeft, Eye, Download
 } from 'lucide-react';
 import { WORKFLOW_CONFIG } from '../config/workflowConfig';
+import { cleanJobNo } from '../config/marketingFormConfig';
 
 export default function DepartmentHandoverModal({
   job,
@@ -49,9 +52,22 @@ export default function DepartmentHandoverModal({
 
   const [uploadingFile, setUploadingFile] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState(job?.attachments || []);
+  const [previewFile, setPreviewFile] = useState(null);
 
   const currentStatus = job?.handoverStatus || 'Draft';
   const isPendingReview = currentStatus.toLowerCase().includes('submitted') || currentStatus.toLowerCase().includes('pending');
+
+  const defaultMarketingName =
+    job?.responsibleEnggName ||
+    job?.engineers?.marketing?.[0] ||
+    job?.fields?.marketing?.['Responsible Engg. Name'] ||
+    job?.handoverChecklist?.submitted_by ||
+    job?.createdBy ||
+    '';
+
+  const marketingOwner = defaultMarketingName || 'Marketing Team';
+  const [marketingOwnerName, setMarketingOwnerName] = useState(defaultMarketingName);
+  const [marketingOwnerId, setMarketingOwnerId] = useState(null);
 
   useEffect(() => {
     if (job) {
@@ -59,6 +75,14 @@ export default function DepartmentHandoverModal({
       setPlanningOwnerName(job.planningOwnerName || '');
       setAttachedFiles(job.attachments || []);
       setHandoverNotes(job.handoverNotes || '');
+      const mName =
+        job.responsibleEnggName ||
+        job.engineers?.marketing?.[0] ||
+        job.fields?.marketing?.['Responsible Engg. Name'] ||
+        job.handoverChecklist?.submitted_by ||
+        job.createdBy ||
+        '';
+      setMarketingOwnerName(mName);
       if (job.handoverChecklist && Object.keys(job.handoverChecklist).length > 0) {
         setChecklist(prev => ({ ...prev, ...job.handoverChecklist }));
       }
@@ -81,10 +105,6 @@ export default function DepartmentHandoverModal({
     } finally {
       setHistoryLoading(false);
     }
-  };
-
-  const toggleChecklist = (key) => {
-    setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleFileUpload = async (e) => {
@@ -120,14 +140,13 @@ export default function DepartmentHandoverModal({
         checklist,
         notes: handoverNotes
       });
-      setSuccessMsg(`Job #${job.jobNo} submitted to ${targetDept.toUpperCase()}!`);
+      setSuccessMsg(`Handover submitted to ${targetDept.toUpperCase()} successfully!`);
       notifySuccess(res.data?.job);
       setTimeout(() => {
         onClose();
-        setSuccessMsg('');
       }, 1000);
     } catch (err) {
-      console.error(err);
+      console.error('Handover submit failed:', err);
       setError(err.response?.data?.detail || 'Failed to submit handover.');
     } finally {
       setLoading(false);
@@ -140,18 +159,17 @@ export default function DepartmentHandoverModal({
       setLoading(true);
       setError('');
       const res = await api.post(`/jobs/${job.id}/handover/accept`, {
-        planningOwnerId,
-        planningOwnerName,
+        planning_owner_id: planningOwnerId,
+        planning_owner_name: planningOwnerName,
         notes: acceptanceNotes
       });
-      setSuccessMsg(`Job #${job.jobNo} handover accepted!`);
+      setSuccessMsg('Handover accepted and committed to Planning stage!');
       notifySuccess(res.data?.job);
       setTimeout(() => {
         onClose();
-        setSuccessMsg('');
       }, 1000);
     } catch (err) {
-      console.error(err);
+      console.error('Accept handover failed:', err);
       setError(err.response?.data?.detail || 'Failed to accept handover.');
     } finally {
       setLoading(false);
@@ -160,49 +178,57 @@ export default function DepartmentHandoverModal({
 
   // Return Handover
   const handleReturnHandover = async () => {
-    if (!returnReason.trim() || returnReason.trim().length < WORKFLOW_CONFIG.minReturnReasonLength) {
-      setError(`Return reason is required (minimum ${WORKFLOW_CONFIG.minReturnReasonLength} characters).`);
+    if (!returnReason.trim()) {
+      setError('Please provide a reason for returning the handover.');
       return;
     }
     try {
       setLoading(true);
       setError('');
       const res = await api.post(`/jobs/${job.id}/handover/return`, {
-        reason: returnReason.trim()
+        reason: returnReason
       });
-      setSuccessMsg(`Job #${job.jobNo} returned for correction.`);
+      setSuccessMsg('Handover returned for correction.');
       notifySuccess(res.data?.job);
       setTimeout(() => {
-        setShowReturnDialog(false);
         onClose();
-        setSuccessMsg('');
       }, 1000);
     } catch (err) {
-      console.error(err);
+      console.error('Return handover failed:', err);
       setError(err.response?.data?.detail || 'Failed to return handover.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Forward to Downstream Department
-  const handleForwardDepartment = async (dept) => {
+  // Handover to Internal Marketing Owner
+  const handleHandoverToMarketing = async () => {
+    if (!marketingOwnerName && !marketingOwnerId) {
+      setError('Please select or specify an Internal Marketing Owner for handover.');
+      return;
+    }
     try {
       setLoading(true);
       setError('');
-      const res = await api.post(`/jobs/${job.id}/handover/forward`, {
-        targetDepartment: dept,
-        notes: `Forwarded to ${dept}`
+      const res = await api.post(`/jobs/${job.id}/handover/submit`, {
+        targetDepartment: 'marketing',
+        fromDepartment: 'planning',
+        toWorkerId: marketingOwnerId,
+        notes: handoverNotes.trim() || `Handed over from Planning to Marketing Owner (${marketingOwnerName})`,
+        checklist: {
+          planningCompleted: true,
+          handoverBy: user?.name || user?.username || 'Planning',
+          handoverAt: new Date().toISOString()
+        }
       });
-      setSuccessMsg(`Job #${job.jobNo} forwarded to ${dept.toUpperCase()}!`);
+      setSuccessMsg(`Job successfully handed over to Marketing Owner (${marketingOwnerName})!`);
       notifySuccess(res.data?.job);
       setTimeout(() => {
         onClose();
-        setSuccessMsg('');
-      }, 1000);
+      }, 1100);
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.detail || 'Failed to forward job.');
+      console.error('Handover to marketing failed:', err);
+      setError(err.response?.data?.detail || 'Failed to handover to Marketing Owner.');
     } finally {
       setLoading(false);
     }
@@ -211,10 +237,10 @@ export default function DepartmentHandoverModal({
   if (!isOpen || !job) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
       <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col my-8">
         
-        {/* Header */}
+        {/* Header - Clean Job Number without '#' */}
         <div className="px-6 py-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-blue-600/30 text-blue-400 border border-blue-500/30">
@@ -223,8 +249,8 @@ export default function DepartmentHandoverModal({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-base tracking-tight text-white">Job Planning Control Center</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700/50">
-                  #{job.jobNo}
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700/50 font-bold">
+                  {cleanJobNo(job.jobNo)}
                 </span>
               </div>
               <p className="text-xs text-slate-400 truncate max-w-md">
@@ -240,16 +266,13 @@ export default function DepartmentHandoverModal({
           </button>
         </div>
 
-        {/* Status Pill & Tabs */}
+        {/* Sub-Header - Removed "Current Status: Submitted to Design", keeping Planning Owner & Tabs */}
         <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 font-medium">Current Status:</span>
-            <span className={`px-2.5 py-0.5 rounded-full font-semibold border ${WORKFLOW_CONFIG.statusBadges[currentStatus] || 'bg-slate-100 text-slate-700 border-slate-300'}`}>
-              {currentStatus}
-            </span>
             {job.planningOwnerName && (
-              <span className="text-slate-500 ml-2">
-                Planning Owner: <strong className="text-slate-800 font-semibold">{job.planningOwnerName}</strong>
+              <span className="text-slate-600 font-medium flex items-center gap-1.5 bg-blue-50/80 px-2.5 py-1 rounded-lg border border-blue-100">
+                <User size={13} className="text-blue-600" />
+                Planning Owner: <strong className="text-slate-900 font-bold">{job.planningOwnerName}</strong>
               </span>
             )}
           </div>
@@ -329,7 +352,7 @@ export default function DepartmentHandoverModal({
               )}
             </div>
           ) : (
-            /* Action Tab */
+            /* Action Tab - Simplified & Streamlined */
             <>
               {/* Return Warning Banner if previously returned */}
               {job.handoverReturnReason && currentStatus === 'Returned for Correction' && (
@@ -343,26 +366,36 @@ export default function DepartmentHandoverModal({
               )}
 
               {/* Review / Acceptance Box (When pending review) */}
-              {isPendingReview && (
-                <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <Clock size={15} className="text-blue-600" />
-                      Pending Evaluation & Acceptance
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowReturnDialog(prev => !prev)}
-                      className="text-xs font-semibold text-rose-600 hover:text-rose-700 underline flex items-center gap-1"
-                    >
-                      <RotateCcw size={13} />
-                      {showReturnDialog ? 'Cancel Return' : 'Return for Correction'}
-                    </button>
+              {isPendingReview ? (
+                <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-4">
+                  {/* Target Department (Planning only) & Marketing Owner Side-by-Side */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                        Target Department
+                      </span>
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-xs">
+                        <Building2 size={13} />
+                        <span>Planning (Own Department)</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                        Marketing Owner
+                      </span>
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white text-slate-800 text-xs font-bold rounded-lg border border-slate-200 shadow-2xs">
+                        <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                          {(marketingOwner || 'M').charAt(0).toUpperCase()}
+                        </div>
+                        <span className="truncate">{marketingOwner}</span>
+                      </div>
+                    </div>
                   </div>
 
                   {showReturnDialog ? (
-                    <div className="p-3 bg-white border border-rose-200 rounded-xl space-y-2 animate-in fade-in duration-150">
-                      <label className="text-xs font-semibold text-rose-800">
+                    <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2.5 animate-in fade-in duration-150">
+                      <label className="text-xs font-bold text-rose-900 block">
                         Reason for Returning Handover *
                       </label>
                       <textarea
@@ -370,37 +403,47 @@ export default function DepartmentHandoverModal({
                         value={returnReason}
                         onChange={e => setReturnReason(e.target.value)}
                         placeholder="State clearly what information or drawings are missing..."
-                        className="w-full text-xs p-2 bg-rose-50/40 border border-rose-200 rounded-lg outline-none focus:ring-2 focus:ring-rose-400"
+                        className="w-full text-xs p-2.5 bg-white border border-rose-200 rounded-lg outline-none focus:ring-2 focus:ring-rose-400"
                       />
-                      <button
-                        type="button"
-                        disabled={loading}
-                        onClick={handleReturnHandover}
-                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
-                      >
-                        {loading ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-                        Confirm Return to Sender
-                      </button>
+                      <div className="flex items-center justify-between pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowReturnDialog(false)}
+                          className="text-xs font-semibold text-slate-600 hover:text-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={handleReturnHandover}
+                          className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                        >
+                          {loading ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                          Confirm Return to Sender
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-3.5">
                       <div>
-                        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                        <label className="text-xs font-bold text-slate-800 mb-1.5 block">
                           Assign Planning Owner
                         </label>
                         <SearchableUserSelect
                           value={planningOwnerName}
                           assignedId={planningOwnerId}
                           department="planning"
-                          placeholder="Select Planning Owner..."
+                          placeholder="Select Planning Owner (e.g. Bhavesh prajapati)..."
                           onChange={(name, id) => {
                             setPlanningOwnerName(name);
                             setPlanningOwnerId(id);
                           }}
                         />
                       </div>
+
                       <div>
-                        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                        <label className="text-xs font-bold text-slate-800 mb-1 block">
                           Acceptance Remarks (Optional)
                         </label>
                         <input
@@ -408,15 +451,25 @@ export default function DepartmentHandoverModal({
                           value={acceptanceNotes}
                           onChange={e => setAcceptanceNotes(e.target.value)}
                           placeholder="Milestone notes or schedule commitments..."
-                          className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+                          className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-400 text-slate-800 font-medium transition-all"
                         />
                       </div>
-                      <div className="flex justify-end gap-2 pt-1">
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setShowReturnDialog(true)}
+                          className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                        >
+                          <RotateCcw size={13} />
+                          Return for Correction
+                        </button>
+
                         <button
                           type="button"
                           disabled={loading}
                           onClick={handleAcceptHandover}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
                         >
                           {loading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                           Accept Handover & Commit
@@ -425,149 +478,150 @@ export default function DepartmentHandoverModal({
                     </div>
                   )}
                 </div>
+              ) : (
+                /* When already accepted or in Forwarding stage */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                        Current Department
+                      </span>
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-xs">
+                        <Building2 size={13} />
+                        <span>Planning</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                        Marketing Owner
+                      </span>
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white text-slate-800 text-xs font-bold rounded-lg border border-slate-200 shadow-2xs">
+                        <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                          {((marketingOwnerName || marketingOwner || 'M')).charAt(0).toUpperCase()}
+                        </div>
+                        <span className="truncate">{marketingOwnerName || marketingOwner}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Handover to Internal Marketing Owner Section */}
+                  <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3.5 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-slate-200/70 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
+                          <ArrowRightLeft size={16} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                            Handover to Internal Marketing Owner
+                          </h4>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            Transfer job milestone and instructions back to the Marketing team
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                        Target: Marketing
+                      </span>
+                    </div>
+
+                    {/* Internal Marketing Owner Selector */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-800 mb-1.5 block">
+                        Internal Marketing Owner
+                      </label>
+                      <SearchableUserSelect
+                        value={marketingOwnerName}
+                        assignedId={marketingOwnerId}
+                        department="marketing"
+                        placeholder="Search or select Marketing Owner..."
+                        onChange={(name, id) => {
+                          setMarketingOwnerName(name);
+                          setMarketingOwnerId(id);
+                        }}
+                      />
+                    </div>
+
+                    {/* Handover Instructions / Notes */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-800 mb-1 block">
+                        Handover Instructions / Notes (Optional)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={handoverNotes}
+                        onChange={e => setHandoverNotes(e.target.value)}
+                        placeholder="Provide specific notes, scheduling details, or feedback for the Marketing Owner..."
+                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 font-medium text-slate-800 transition-all"
+                      />
+                    </div>
+
+                    {/* Action Button inside card */}
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={handleHandoverToMarketing}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-indigo-500/20 transition-all disabled:opacity-50"
+                      >
+                        {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                        <span>Handover to Marketing Owner</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
 
-              {/* Handover Submission / Transfer Section */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                    Handover to Department
-                  </h4>
-                  <span className="text-[11px] text-slate-400">Collaborative transition</span>
+              {/* Attachments Section */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">Attachments (PO / Drawings / Specs / Excel)</label>
+                  <label className="text-xs text-blue-600 hover:text-blue-700 font-medium cursor-pointer flex items-center gap-1">
+                    {uploadingFile ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                    <span>Upload Document</span>
+                    <input type="file" onChange={handleFileUpload} className="hidden" />
+                  </label>
                 </div>
 
-                {/* Target Department Selection */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">Target Department</label>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {[
-                      { id: 'planning', label: 'Planning' },
-                      { id: 'design', label: 'Design- Elec' },
-                      { id: 'mechanical', label: 'Design- Mech' },
-                      { id: 'purchase', label: 'Procurement' },
-                      { id: 'production', label: 'Production' },
-                      { id: 'dispatch', label: 'Dispatch' }
-                    ].map(dept => (
-                      <button
-                        key={dept.id}
-                        type="button"
-                        onClick={() => setTargetDept(dept.id)}
-                        className={`p-2 rounded-xl text-xs font-semibold border transition-all text-center ${
-                          targetDept === dept.id
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {dept.label}
-                      </button>
-                    ))}
+                {attachedFiles.length === 0 ? (
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
+                    No files attached. Click "Upload Document" to attach files.
                   </div>
-                </div>
-
-                {/* Checklist Verification */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1.5 block">Handover Verification Checklist</label>
-                  <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-                    {[
-                      { key: 'coreVerified', label: 'Job Core Details Verified (Job No, Panel, Qty, Client)' },
-                      { key: 'poVerified', label: 'Customer Purchase Order & Delivery Terms Verified' },
-                      { key: 'engineerAssigned', label: `Responsible Engineer Confirmed: ${job.responsibleEnggName || 'N/A'}` },
-                      { key: 'specsAttached', label: 'Technical Specifications / Drawings Reference Documented' },
-                      { key: 'remarksProvided', label: 'Handover Instructions & Remarks Documented' },
-                    ].map(item => (
-                      <label
-                        key={item.key}
-                        onClick={() => toggleChecklist(item.key)}
-                        className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none p-1 rounded hover:bg-slate-100"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(checklist[item.key])}
-                          onChange={() => {}}
-                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-                        />
-                        <span className={checklist[item.key] ? 'font-medium text-slate-900' : 'text-slate-500'}>
-                          {item.label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Handover Notes */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Handover Instructions / Notes</label>
-                  <textarea
-                    rows={2}
-                    value={handoverNotes}
-                    onChange={e => setHandoverNotes(e.target.value)}
-                    placeholder="Provide specific directions, scope, or requirements for the receiving department..."
-                    className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400"
-                  />
-                </div>
-
-                {/* Attachments Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-slate-700">Attachments (PO / Drawings / Specs)</label>
-                    <label className="text-xs text-blue-600 hover:text-blue-700 font-medium cursor-pointer flex items-center gap-1">
-                      {uploadingFile ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                      <span>Upload Document</span>
-                      <input type="file" onChange={handleFileUpload} className="hidden" />
-                    </label>
-                  </div>
-
-                  {attachedFiles.length === 0 ? (
-                    <div className="p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
-                      No files uploaded yet. Click "Upload Document" to attach PO PDF or specification files.
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {attachedFiles.map((f, i) => (
-                        <div key={f.id || i} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                          <div className="flex items-center gap-2 truncate">
-                            <FileText size={14} className="text-blue-500 shrink-0" />
-                            <span className="font-medium text-slate-800 truncate">{f.originalName || f.storedName}</span>
-                            <span className="text-[10px] text-slate-400">({Math.round((f.size || 0) / 1024)} KB)</span>
-                          </div>
-                          {f.url && (
+                ) : (
+                  <div className="space-y-1.5">
+                    {attachedFiles.map((f, i) => (
+                      <div key={f.id || i} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                        <div className="flex items-center gap-2 truncate">
+                          <FileText size={14} className="text-blue-500 shrink-0" />
+                          <span className="font-medium text-slate-800 truncate">{f.originalName || f.storedName}</span>
+                          <span className="text-[10px] text-slate-400">({Math.round((f.size || 0) / 1024)} KB)</span>
+                        </div>
+                        {f.url && (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewFile(f)}
+                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="View inside modal"
+                            >
+                              <Eye size={12} />
+                              <span>View</span>
+                            </button>
                             <a
                               href={f.url}
+                              download={f.originalName || f.storedName}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-blue-600 hover:text-blue-700 text-xs font-semibold shrink-0"
+                              className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200 transition-colors"
+                              title="Download file"
                             >
-                              View
+                              <Download size={13} />
                             </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Forwarding action buttons for Planning Completed jobs */}
-                {currentStatus === 'Accepted' && (
-                  <div className="p-3 bg-slate-100 rounded-xl space-y-2">
-                    <span className="text-xs font-semibold text-slate-700">Planning Completed? Quick Forward to:</span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleForwardDepartment('design')}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1"
-                      >
-                        <ArrowRight size={13} />
-                        Forward to Design
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleForwardDepartment('purchase')}
-                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1"
-                      >
-                        <ArrowRight size={13} />
-                        Forward to Procurement
-                      </button>
-                    </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -584,19 +638,15 @@ export default function DepartmentHandoverModal({
           >
             Close
           </button>
-
-          {activeTab === 'action' && !isPendingReview && (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={handleSubmitHandover}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              <span>Submit Handover to {targetDept.toUpperCase()}</span>
-            </button>
-          )}
         </div>
+
+        {/* In-Modal Document/Excel/PDF Preview Overlay */}
+        {previewFile && (
+          <DocumentPreviewModal
+            file={previewFile}
+            onClose={() => setPreviewFile(null)}
+          />
+        )}
       </div>
     </div>
   );

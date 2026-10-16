@@ -43,6 +43,57 @@ const REASSIGNMENT_REASONS = [
   "Other"
 ];
 
+// Display labels configuration for columns (easily customizable)
+export const COLUMN_DISPLAY_LABELS = {
+  jobNo: 'Job No',
+  customer: 'Customer',
+  project: 'Project',
+  panel: 'Panel',
+  currentStage: 'Current Stage',
+  department: 'Department',
+  workingBy: 'Working By (Current Responsibility)',
+  planningOwner: 'Planning Owner',
+  assignedDate: 'Assigned Date',
+  expectedStart: 'Expected Start',
+  originalExpected: 'Original Date',
+  currentExpected: 'Expected Date',
+  todayStatus: 'Today Status',
+  daysLateEarly: 'Schedule Variance',
+  lateReason: 'Why Late?',
+  reasonReportedBy: 'Reported By',
+  reasonDate: 'Reason Date',
+  actualCompletion: 'Completed Date',
+  completionVariance: 'Completion Result',
+  lastActivity: 'Last Activity'
+};
+
+// Formatter for Job Planning dates (e.g. "14 Oct 2026")
+export const formatJobDate = (dateVal) => {
+  if (!dateVal) return '—';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return '—';
+  }
+};
+
+// Dynamic calendar day difference calculation between target and baseline
+export const getDaysDifference = (targetDate, baselineDate) => {
+  if (!targetDate || !baselineDate) return 0;
+  try {
+    const t = new Date(targetDate);
+    const b = new Date(baselineDate);
+    if (isNaN(t.getTime()) || isNaN(b.getTime())) return 0;
+    const tUtc = Date.UTC(t.getFullYear(), t.getMonth(), t.getDate());
+    const bUtc = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+    return Math.round((tUtc - bUtc) / (1000 * 60 * 60 * 24));
+  } catch {
+    return 0;
+  }
+};
+
 export default function AdminOversightDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -78,6 +129,11 @@ export default function AdminOversightDashboard() {
   // Active KPI Card filter
   const [activeKpiFilter, setActiveKpiFilter] = useState(null);
 
+  // Section 5: Users Workload & Delay Department & Search States
+  const [selectedUserDept, setSelectedUserDept] = useState('all');
+  const [userSearchText, setUserSearchText] = useState('');
+  const [onlyUsersWithWork, setOnlyUsersWithWork] = useState(false);
+
   // Column Settings (Show/Hide Table Columns)
   const [columnVisibility, setColumnVisibility] = useState({
     jobNo: true,
@@ -102,6 +158,21 @@ export default function AdminOversightDashboard() {
     lastActivity: true
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [columnSearch, setColumnSearch] = useState('');
+
+  // Operational Charts Placement (before table, after table, or hidden)
+  const [chartPlacement, setChartPlacement] = useState(() => {
+    try {
+      return localStorage.getItem('admin_chart_placement') || 'before';
+    } catch {
+      return 'before';
+    }
+  });
+
+  const handlePlacementChange = (val) => {
+    setChartPlacement(val);
+    try { localStorage.setItem('admin_chart_placement', val); } catch {}
+  };
 
   // Complete Job Accountability Drawer
   const [selectedJobDrawer, setSelectedJobDrawer] = useState(null);
@@ -202,9 +273,11 @@ export default function AdminOversightDashboard() {
 
     // Header Controls Filter
     if (filters.search) {
-      const q = filters.search.toLowerCase();
+      const q = filters.search.toLowerCase().trim();
+      const qNoHash = q.startsWith('#') ? q.slice(1).trim() : q;
       list = list.filter(j =>
         (j.jobNo || '').toLowerCase().includes(q) ||
+        (j.jobNo || '').toLowerCase().includes(qNoHash) ||
         (j.clientName || '').toLowerCase().includes(q) ||
         (j.projectName || '').toLowerCase().includes(q) ||
         (j.panelName || '').toLowerCase().includes(q) ||
@@ -244,6 +317,89 @@ export default function AdminOversightDashboard() {
     monitorItems.forEach(j => { if (j.department) set.add(j.department); });
     return Array.from(set).sort();
   }, [monitorItems]);
+
+  // Section 5 Department Dropdown Options & Filtered User List
+  const userDepartmentOptions = useMemo(() => {
+    const map = new Map();
+    userAccountability.forEach(u => {
+      const deptName = u.department || 'Other';
+      if (!map.has(deptName)) {
+        map.set(deptName, { count: 0, active: 0, overdue: 0, completed: 0 });
+      }
+      const data = map.get(deptName);
+      data.count += 1;
+      data.active += (u.activeJobs || 0);
+      data.overdue += (u.overdueJobs || 0);
+      data.completed += (u.completedJobs || 0);
+    });
+
+    const list = Array.from(map.entries()).map(([deptName, stats]) => ({
+      name: deptName,
+      ...stats
+    }));
+
+    // Sort with primary departments first
+    const order = ['Marketing / Sales', 'Design - Electrical', 'Design - Mechanical', 'Procurement / Purchase', 'Production & QC & Dispatch', 'Executive / Administration'];
+    list.sort((a, b) => {
+      const idxA = order.indexOf(a.name);
+      const idxB = order.indexOf(b.name);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [userAccountability]);
+
+  const filteredUserWorkload = useMemo(() => {
+    let list = userAccountability;
+
+    if (selectedUserDept !== 'all') {
+      list = list.filter(u => {
+        const deptMatch = (u.department || '').toLowerCase() === selectedUserDept.toLowerCase();
+        // If Marketing / Sales is selected, ensure executive/admin accounts are not mixed in
+        if (selectedUserDept.toLowerCase().includes('marketing')) {
+          return deptMatch && u.departmentKey !== 'executive';
+        }
+        return deptMatch;
+      });
+    }
+
+    if (userSearchText) {
+      const q = userSearchText.toLowerCase();
+      list = list.filter(u =>
+        (u.userName || '').toLowerCase().includes(q) ||
+        (u.department || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (onlyUsersWithWork) {
+      list = list.filter(u => (u.activeJobs > 0 || u.overdueJobs > 0 || u.completedJobs > 0));
+    }
+
+    return list;
+  }, [userAccountability, selectedUserDept, userSearchText, onlyUsersWithWork]);
+
+  // Selected Department Aggregated Summary
+  const selectedDeptStats = useMemo(() => {
+    if (selectedUserDept === 'all') {
+      return {
+        name: 'All Departments',
+        totalUsers: userAccountability.length,
+        active: userAccountability.reduce((acc, u) => acc + (u.activeJobs || 0), 0),
+        overdue: userAccountability.reduce((acc, u) => acc + (u.overdueJobs || 0), 0),
+        completed: userAccountability.reduce((acc, u) => acc + (u.completedJobs || 0), 0)
+      };
+    }
+    const found = userDepartmentOptions.find(d => d.name.toLowerCase() === selectedUserDept.toLowerCase());
+    return {
+      name: selectedUserDept,
+      totalUsers: found ? found.count : 0,
+      active: found ? found.active : 0,
+      overdue: found ? found.overdue : 0,
+      completed: found ? found.completed : 0
+    };
+  }, [selectedUserDept, userAccountability, userDepartmentOptions]);
 
   // Top 12 Active KPI Cards Definition
   const TOP_12_KPIS = useMemo(() => {
@@ -412,6 +568,202 @@ export default function AdminOversightDashboard() {
     }
   };
 
+  // Operational Charts Component (Can be placed Before or After Table)
+  const renderChartsSection = () => (
+    <div className="space-y-3 animate-in fade-in duration-200">
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <Activity size={18} className="text-indigo-600" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+            Users Working Charts
+          </h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">
+            Live active work duration & categorized delay root causes
+          </span>
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-[10px]">
+            <button
+              onClick={() => handlePlacementChange('before')}
+              className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                chartPlacement === 'before' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Display Charts Before Table"
+            >
+              📊 Before Table
+            </button>
+            <button
+              onClick={() => handlePlacementChange('after')}
+              className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                chartPlacement === 'after' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Display Charts After Table"
+            >
+              📊 After Table
+            </button>
+            <button
+              onClick={() => handlePlacementChange('hidden')}
+              className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                chartPlacement === 'hidden' ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Hide Charts"
+            >
+              Hide
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Chart A: Live Active Work in Progress vs Expected Duration */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Activity size={16} className="text-indigo-600" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Live Active Work Duration vs Expected Budget (Hours)
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Real-time active work duration for currently running jobs tracked by worker.
+              </p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {liveWorkingData.length} Live
+            </span>
+          </div>
+
+          {liveWorkingData.length === 0 ? (
+            <div className="h-60 flex flex-col items-center justify-center text-slate-400 text-xs">
+              <Clock size={28} className="mb-2 text-slate-300" />
+              <span>No active jobs currently running timers.</span>
+            </div>
+          ) : (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={liveWorkingData}
+                  layout="vertical"
+                  margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
+                >
+                  <XAxis type="number" unit="h" tick={{ fontSize: 10 }} />
+                  <YAxis
+                    dataKey="jobNo"
+                    type="category"
+                    tick={{ fontSize: 11, fontWeight: 600 }}
+                    width={70}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white p-2.5 rounded-xl text-xs shadow-lg space-y-1">
+                            <div className="font-bold text-amber-400">Job {data.jobNo} — {data.clientName}</div>
+                            <div>Worker: <strong className="text-white">{data.workerName}</strong> ({data.department})</div>
+                            <div>Active Hours: <strong className="text-emerald-400">{data.activeHours}h</strong></div>
+                            <div>Expected Budget: <strong className="text-blue-300">{data.expectedHours}h</strong></div>
+                            <div>Variance: <strong className={data.varianceHours > 0 ? 'text-rose-400' : 'text-emerald-400'}>{data.varianceHours > 0 ? `+${data.varianceHours}h Late` : `${data.varianceHours}h`}</strong></div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
+                  <Bar dataKey="activeHours" name="Active Worked (h)" fill="#6366f1" radius={[0, 4, 4, 0]}>
+                    {liveWorkingData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.isOverBudget ? '#ef4444' : '#6366f1'} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="expectedHours" name="Expected Budget (h)" fill="#cbd5e1" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Chart B: Live Delay Reasons Distribution */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-rose-600" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Why Are Jobs Late? (Live Reason Distribution)
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Click any delay reason bar to filter the Accountability Table below.
+              </p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+              {delayData.totalDelayed || 0} Delayed
+            </span>
+          </div>
+
+          {(!delayData.categoryBreakdown || delayData.categoryBreakdown.length === 0) ? (
+            <div className="h-60 flex flex-col items-center justify-center text-slate-400 text-xs">
+              <CheckCircle2 size={28} className="mb-2 text-emerald-400" />
+              <span>No delayed jobs recorded currently.</span>
+            </div>
+          ) : (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={delayData.categoryBreakdown}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                >
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis
+                    dataKey="category"
+                    type="category"
+                    tick={{ fontSize: 10 }}
+                    width={130}
+                    tickFormatter={(val) => val.length > 20 ? `${val.substring(0, 18)}...` : val}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white p-2.5 rounded-xl text-xs shadow-lg space-y-1">
+                            <div className="font-bold text-amber-400">{data.category}</div>
+                            <div>Delayed Jobs: <strong>{data.count}</strong></div>
+                            <div className="text-[10px] text-slate-400">Click to filter table below</div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar
+                    dataKey="count"
+                    name="Affected Jobs"
+                    fill="#f43f5e"
+                    radius={[0, 4, 4, 0]}
+                    onClick={(entry) => {
+                      if (entry?.category) {
+                        setFilters(prev => ({ ...prev, search: entry.category, delayStatus: 'OVERDUE' }));
+                      }
+                    }}
+                    cursor="pointer"
+                  >
+                    {delayData.categoryBreakdown.map((entry, index) => (
+                      <Cell key={`delay-cell-${index}`} fill={entry.category === 'Reason Not Recorded' ? '#f97316' : '#f43f5e'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -475,7 +827,7 @@ export default function AdminOversightDashboard() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search Job #, Project, Customer, Worker..."
+              placeholder="Search Job Number, Project, Customer, Worker..."
               value={filters.search}
               onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
               className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 placeholder-slate-400"
@@ -589,197 +941,48 @@ export default function AdminOversightDashboard() {
         </div>
       </div>
 
-      {/* 2. TOP 12 ACTIVE KPI CARDS */}
-      <div>
-        <div className="flex items-center justify-between mb-3 px-1">
+      {/* 2. CHARTS SECTION (When placement is 'before') */}
+      {chartPlacement === 'before' && renderChartsSection()}
+
+      {/* 3. "USERS WORKING" DYNAMIC DROPDOWN SELECTOR (Positioned directly after charts) */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <BarChart3 size={16} className="text-indigo-600" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Operational Accountability KPI Matrix (12 Interactive Live Indicators)
-            </h2>
+            <SlidersHorizontal size={17} className="text-indigo-600" />
+            <label className="text-xs font-black uppercase tracking-wider text-slate-800">
+              Users Working:
+            </label>
           </div>
-          {activeKpiFilter && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1">
-              <span>Filtering table by: <strong>{activeKpiFilter}</strong></span>
-              <button onClick={() => setActiveKpiFilter(null)} className="hover:text-rose-600"><X size={12} /></button>
-            </span>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {TOP_12_KPIS.map(card => {
-            const isActive = activeKpiFilter === card.id;
-            return (
-              <div
-                key={card.id}
-                onClick={() => setActiveKpiFilter(isActive ? null : card.id)}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                  isActive ? card.activeTheme : card.theme
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1 mb-2">
-                  <span className="text-[11px] font-bold leading-tight">{card.title}</span>
-                  {card.icon}
-                </div>
-                <div>
-                  <div className="text-2xl font-black tracking-tight">{card.count}</div>
-                  <div className="text-[10px] text-slate-500 font-medium truncate">{card.subtitle}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 3. ROW 3: DUAL LIVE WORKING & DELAY INTELLIGENCE CHARTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Chart A: Live Active Work in Progress vs Expected Duration */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Activity size={16} className="text-indigo-600" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  Live Active Work Duration vs Expected Budget (Hours)
-                </h3>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Real-time active work duration for currently running jobs tracked by worker.
-              </p>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              {liveWorkingData.length} Live
-            </span>
+          <div className="relative">
+            <select
+              value={activeKpiFilter || 'all'}
+              onChange={(e) => setActiveKpiFilter(e.target.value === 'all' ? null : e.target.value)}
+              className="pl-3 pr-9 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer shadow-2xs transition-all"
+            >
+              <option value="all">🔍 Users Working: All Jobs ({monitorItems.length} Total)</option>
+              {TOP_12_KPIS.map(kpi => (
+                <option key={kpi.id} value={kpi.id}>
+                  {kpi.title} ({kpi.count} {kpi.count === 1 ? 'Job' : 'Jobs'})
+                </option>
+              ))}
+            </select>
           </div>
-
-          {liveWorkingData.length === 0 ? (
-            <div className="h-60 flex flex-col items-center justify-center text-slate-400 text-xs">
-              <Clock size={28} className="mb-2 text-slate-300" />
-              <span>No active jobs currently running timers.</span>
-            </div>
-          ) : (
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={liveWorkingData}
-                  layout="vertical"
-                  margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
-                >
-                  <XAxis type="number" unit="h" tick={{ fontSize: 10 }} />
-                  <YAxis
-                    dataKey="jobNo"
-                    type="category"
-                    tick={{ fontSize: 11, fontWeight: 600 }}
-                    width={70}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-slate-900 text-white p-2.5 rounded-xl text-xs shadow-lg space-y-1">
-                            <div className="font-bold text-amber-400">Job #{data.jobNo} — {data.clientName}</div>
-                            <div>Worker: <strong className="text-white">{data.workerName}</strong> ({data.department})</div>
-                            <div>Active Hours: <strong className="text-emerald-400">{data.activeHours}h</strong></div>
-                            <div>Expected Budget: <strong className="text-blue-300">{data.expectedHours}h</strong></div>
-                            <div>Variance: <strong className={data.varianceHours > 0 ? 'text-rose-400' : 'text-emerald-400'}>{data.varianceHours > 0 ? `+${data.varianceHours}h Late` : `${data.varianceHours}h`}</strong></div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
-                  <Bar dataKey="activeHours" name="Active Worked (h)" fill="#6366f1" radius={[0, 4, 4, 0]}>
-                    {liveWorkingData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.isOverBudget ? '#ef4444' : '#6366f1'} />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="expectedHours" name="Expected Budget (h)" fill="#cbd5e1" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
         </div>
 
-        {/* Chart B: Live Delay Reasons Distribution */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={16} className="text-rose-600" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  Why Are Jobs Late? (Live Reason Distribution)
-                </h3>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Click any delay reason bar to filter the Accountability Table below.
-              </p>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-              {delayData.totalDelayed || 0} Delayed
+        {activeKpiFilter && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5">
+              <span>Filtered by Users Working: <strong>{TOP_12_KPIS.find(k => k.id === activeKpiFilter)?.title || activeKpiFilter}</strong></span>
             </span>
+            <button
+              onClick={() => setActiveKpiFilter(null)}
+              className="px-2.5 py-1 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl flex items-center gap-1 cursor-pointer transition-all"
+            >
+              <X size={12} />
+              <span>Reset</span>
+            </button>
           </div>
-
-          {(!delayData.categoryBreakdown || delayData.categoryBreakdown.length === 0) ? (
-            <div className="h-60 flex flex-col items-center justify-center text-slate-400 text-xs">
-              <CheckCircle2 size={28} className="mb-2 text-emerald-400" />
-              <span>No delayed jobs recorded currently.</span>
-            </div>
-          ) : (
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={delayData.categoryBreakdown}
-                  layout="vertical"
-                  margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                >
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis
-                    dataKey="category"
-                    type="category"
-                    tick={{ fontSize: 10 }}
-                    width={130}
-                    tickFormatter={(val) => val.length > 20 ? `${val.substring(0, 18)}...` : val}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-slate-900 text-white p-2.5 rounded-xl text-xs shadow-lg space-y-1">
-                            <div className="font-bold text-amber-400">{data.category}</div>
-                            <div>Delayed Jobs: <strong>{data.count}</strong></div>
-                            <div className="text-[10px] text-slate-400">Click to filter table below</div>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Bar
-                    dataKey="count"
-                    name="Affected Jobs"
-                    fill="#f43f5e"
-                    radius={[0, 4, 4, 0]}
-                    onClick={(entry) => {
-                      if (entry?.category) {
-                        setFilters(prev => ({ ...prev, search: entry.category, delayStatus: 'OVERDUE' }));
-                      }
-                    }}
-                    cursor="pointer"
-                  >
-                    {delayData.categoryBreakdown.map((entry, index) => (
-                      <Cell key={`delay-cell-${index}`} fill={entry.category === 'Reason Not Recorded' ? '#f97316' : '#f43f5e'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-
+        )}
       </div>
 
       {/* 4. MAIN ACCOUNTABILITY & DELAY MONITOR TABLE (20 COLUMNS) */}
@@ -797,38 +1000,130 @@ export default function AdminOversightDashboard() {
             </p>
           </div>
 
-          {/* Column Settings Toggle */}
-          <div className="relative">
-            <button
-              onClick={() => setShowColumnSettings(!showColumnSettings)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs cursor-pointer transition-all"
-            >
-              <Settings2 size={13} className="text-slate-500" />
-              <span>Column Settings</span>
-              <ChevronDown size={12} className={showColumnSettings ? 'rotate-180 text-indigo-600' : 'text-slate-400'} />
-            </button>
+          {/* Right Header Actions: Placement switch and Column Settings Toggle */}
+          <div className="flex items-center gap-2">
+            {/* Chart Placement Switch */}
+            <div className="hidden md:flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-[10px]">
+              <button
+                onClick={() => handlePlacementChange('before')}
+                className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  chartPlacement === 'before' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Display Charts Before Table"
+              >
+                📊 Charts Before Table
+              </button>
+              <button
+                onClick={() => handlePlacementChange('after')}
+                className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  chartPlacement === 'after' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Display Charts After Table"
+              >
+                📊 Charts After Table
+              </button>
+              <button
+                onClick={() => handlePlacementChange('hidden')}
+                className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  chartPlacement === 'hidden' ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Hide Charts"
+              >
+                Hide
+              </button>
+            </div>
 
-            {showColumnSettings && (
-              <div className="absolute right-0 top-9 w-64 p-3 bg-white border border-slate-200 rounded-2xl shadow-xl z-30 space-y-2 text-xs">
-                <div className="font-bold text-slate-800 pb-1 border-b border-slate-100 flex items-center justify-between">
-                  <span>Show / Hide Columns</span>
-                  <button onClick={() => setShowColumnSettings(false)} className="text-slate-400 hover:text-slate-600"><X size={12} /></button>
+            {/* Column Settings Toggle with Filter Icon and Scroll */}
+            <div className="relative">
+              <button
+                onClick={() => setShowColumnSettings(!showColumnSettings)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs cursor-pointer transition-all"
+              >
+                <Filter size={13} className="text-indigo-600" />
+                <Settings2 size={13} className="text-slate-500" />
+                <span>Column Settings</span>
+                <ChevronDown size={12} className={showColumnSettings ? 'rotate-180 text-indigo-600' : 'text-slate-400'} />
+              </button>
+
+              {showColumnSettings && (
+                <div className="absolute right-0 top-9 w-72 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-30 space-y-2.5 text-xs animate-in zoom-in-95 duration-150">
+                  <div className="font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Filter size={13} className="text-indigo-600" />
+                      <span>Column Settings ({Object.values(columnVisibility).filter(Boolean).length}/20)</span>
+                    </div>
+                    <button onClick={() => setShowColumnSettings(false)} className="text-slate-400 hover:text-slate-600"><X size={13} /></button>
+                  </div>
+
+                  {/* Filter Search Input */}
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filter column names..."
+                      value={columnSearch}
+                      onChange={(e) => setColumnSearch(e.target.value)}
+                      className="w-full pl-7 pr-6 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    {columnSearch && (
+                      <button onClick={() => setColumnSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick select buttons */}
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 px-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allTrue = {};
+                        Object.keys(columnVisibility).forEach(k => { allTrue[k] = true; });
+                        setColumnVisibility(allTrue);
+                      }}
+                      className="text-indigo-600 hover:underline font-semibold cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setColumnVisibility({
+                          jobNo: true, customer: true, project: true, panel: true, currentStage: true,
+                          department: true, workingBy: true, planningOwner: true, assignedDate: false,
+                          expectedStart: false, originalExpected: true, currentExpected: true,
+                          todayStatus: true, daysLateEarly: true, lateReason: true, reasonReportedBy: true,
+                          reasonDate: false, actualCompletion: true, completionVariance: true, lastActivity: true
+                        });
+                      }}
+                      className="text-slate-500 hover:underline cursor-pointer"
+                    >
+                      Reset Defaults
+                    </button>
+                  </div>
+
+                  {/* Scrollable Columns List */}
+                  <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
+                    {Object.keys(columnVisibility)
+                      .filter(col => {
+                        const label = COLUMN_DISPLAY_LABELS[col] || col;
+                        return label.toLowerCase().includes(columnSearch.toLowerCase());
+                      })
+                      .map(col => (
+                        <label key={col} className="flex items-center gap-1.5 text-slate-700 hover:bg-slate-50 p-1 rounded-md cursor-pointer text-[11px] select-none">
+                          <input
+                            type="checkbox"
+                            checked={columnVisibility[col]}
+                            onChange={(e) => setColumnVisibility(prev => ({ ...prev, [col]: e.target.checked }))}
+                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="truncate">{COLUMN_DISPLAY_LABELS[col] || col.replace(/([A-Z])/g, ' $1')}</span>
+                        </label>
+                      ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5 max-h-60 overflow-y-auto">
-                  {Object.keys(columnVisibility).map(col => (
-                    <label key={col} className="flex items-center gap-1.5 text-slate-700 cursor-pointer text-[11px] capitalize">
-                      <input
-                        type="checkbox"
-                        checked={columnVisibility[col]}
-                        onChange={(e) => setColumnVisibility(prev => ({ ...prev, [col]: e.target.checked }))}
-                        className="rounded text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span>{col.replace(/([A-Z])/g, ' $1')}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -837,25 +1132,25 @@ export default function AdminOversightDashboard() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-extrabold tracking-wider whitespace-nowrap">
-                {columnVisibility.jobNo && <th className="py-3 px-3">Job No</th>}
-                {columnVisibility.customer && <th className="py-3 px-3">Customer</th>}
-                {columnVisibility.project && <th className="py-3 px-3">Project</th>}
-                {columnVisibility.panel && <th className="py-3 px-3">Panel</th>}
-                {columnVisibility.currentStage && <th className="py-3 px-3">Current Stage</th>}
-                {columnVisibility.department && <th className="py-3 px-3">Department</th>}
-                {columnVisibility.workingBy && <th className="py-3 px-3 min-w-[180px]">Working By (Current Responsibility)</th>}
-                {columnVisibility.planningOwner && <th className="py-3 px-3">Planning Owner</th>}
-                {columnVisibility.assignedDate && <th className="py-3 px-3">Assigned Date</th>}
-                {columnVisibility.expectedStart && <th className="py-3 px-3">Expected Start</th>}
-                {columnVisibility.originalExpected && <th className="py-3 px-3 font-black text-slate-800">Original Expected Date</th>}
-                {columnVisibility.currentExpected && <th className="py-3 px-3 font-black text-indigo-700">Current Expected Date</th>}
-                {columnVisibility.todayStatus && <th className="py-3 px-3">Today Status</th>}
-                {columnVisibility.daysLateEarly && <th className="py-3 px-3">Days Variance</th>}
-                {columnVisibility.lateReason && <th className="py-3 px-3 min-w-[160px]">Why Late?</th>}
-                {columnVisibility.reasonReportedBy && <th className="py-3 px-3">Reported By</th>}
-                {columnVisibility.reasonDate && <th className="py-3 px-3">Reason Date</th>}
-                {columnVisibility.actualCompletion && <th className="py-3 px-3">Actual Completion</th>}
-                {columnVisibility.completionVariance && <th className="py-3 px-3">Variance</th>}
+                {columnVisibility.jobNo && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.jobNo}</th>}
+                {columnVisibility.customer && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.customer}</th>}
+                {columnVisibility.project && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.project}</th>}
+                {columnVisibility.panel && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.panel}</th>}
+                {columnVisibility.currentStage && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.currentStage}</th>}
+                {columnVisibility.department && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.department}</th>}
+                {columnVisibility.workingBy && <th className="py-3 px-3 min-w-[180px]">{COLUMN_DISPLAY_LABELS.workingBy}</th>}
+                {columnVisibility.planningOwner && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.planningOwner}</th>}
+                {columnVisibility.assignedDate && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.assignedDate}</th>}
+                {columnVisibility.expectedStart && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.expectedStart}</th>}
+                {columnVisibility.originalExpected && <th className="py-3 px-3 font-black text-slate-800">{COLUMN_DISPLAY_LABELS.originalExpected}</th>}
+                {columnVisibility.currentExpected && <th className="py-3 px-3 font-black text-indigo-700">{COLUMN_DISPLAY_LABELS.currentExpected}</th>}
+                {columnVisibility.todayStatus && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.todayStatus}</th>}
+                {columnVisibility.daysLateEarly && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.daysLateEarly}</th>}
+                {columnVisibility.lateReason && <th className="py-3 px-3 min-w-[160px]">{COLUMN_DISPLAY_LABELS.lateReason}</th>}
+                {columnVisibility.reasonReportedBy && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.reasonReportedBy}</th>}
+                {columnVisibility.reasonDate && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.reasonDate}</th>}
+                {columnVisibility.actualCompletion && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.actualCompletion}</th>}
+                {columnVisibility.completionVariance && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.completionVariance}</th>}
                 <th className="py-3 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -887,7 +1182,7 @@ export default function AdminOversightDashboard() {
                             onClick={() => setSelectedJobDrawer(job)}
                             className="hover:underline flex items-center gap-1 cursor-pointer"
                           >
-                            <span>#{job.jobNo}</span>
+                            <span>{job.jobNo}</span>
                             <Eye size={12} className="text-slate-400" />
                           </button>
                         </td>
@@ -973,18 +1268,18 @@ export default function AdminOversightDashboard() {
                         </td>
                       )}
 
-                      {/* Original Expected Date (Section 6 Spec: NEVER OVERWRITTEN) */}
+                      {/* Original Date (Section 6 Spec: NEVER OVERWRITTEN) */}
                       {columnVisibility.originalExpected && (
                         <td className="py-3 px-3 font-bold text-slate-800 whitespace-nowrap">
-                          {job.originalExpectedDate ? new Date(job.originalExpectedDate).toLocaleDateString() : '—'}
+                          {formatJobDate(job.originalDate || job.originalExpectedDate || job.expectedDate || job.currentExpectedDate)}
                         </td>
                       )}
 
-                      {/* Current Expected Date */}
+                      {/* Expected Date */}
                       {columnVisibility.currentExpected && (
                         <td className="py-3 px-3 font-bold text-indigo-700 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
-                            <span>{job.currentExpectedDate ? new Date(job.currentExpectedDate).toLocaleDateString() : '—'}</span>
+                            <span>{formatJobDate(job.expectedDate || job.currentExpectedDate)}</span>
                             {job.revisionsCount > 0 && (
                               <span className="px-1 py-0.2 rounded text-[9px] bg-cyan-100 text-cyan-800 font-bold" title="Revised date">
                                 Rev ({job.revisionsCount})
@@ -1008,20 +1303,29 @@ export default function AdminOversightDashboard() {
                         </td>
                       )}
 
-                      {/* Days Early/Late Variance */}
+                      {/* Schedule Variance (Revised by X Days or 0 Days) */}
                       {columnVisibility.daysLateEarly && (
                         <td className="py-3 px-3 font-bold whitespace-nowrap">
-                          {isDone ? (
-                            <span className={job.daysVariance > 0 ? 'text-rose-600' : 'text-emerald-600'}>
-                              {job.daysVariance > 0 ? `+${job.daysVariance}d Late` : `${job.daysVariance}d Early`}
-                            </span>
-                          ) : isLate ? (
-                            <span className="text-rose-700 font-black">+{job.daysVariance}d Overdue</span>
-                          ) : isAtRisk ? (
-                            <span className="text-amber-700">Due Soon</span>
-                          ) : (
-                            <span className="text-emerald-700">On Schedule</span>
-                          )}
+                          {(() => {
+                            const schedDiff = job.scheduleMovementDays !== undefined 
+                              ? job.scheduleMovementDays 
+                              : getDaysDifference(job.expectedDate || job.currentExpectedDate, job.originalDate || job.originalExpectedDate);
+                            if (schedDiff > 0) {
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  Revised by {schedDiff} {schedDiff === 1 ? 'Day' : 'Days'}
+                                </span>
+                              );
+                            }
+                            if (schedDiff < 0) {
+                              return (
+                                <span className="text-emerald-700 font-medium">
+                                  {Math.abs(schedDiff)} {Math.abs(schedDiff) === 1 ? 'Day' : 'Days'} Earlier
+                                </span>
+                              );
+                            }
+                            return <span className="text-slate-500 font-medium">0 Days</span>;
+                          })()}
                         </td>
                       )}
 
@@ -1061,17 +1365,37 @@ export default function AdminOversightDashboard() {
                         </td>
                       )}
 
-                      {/* Actual Completion */}
+                      {/* Completed Date */}
                       {columnVisibility.actualCompletion && (
                         <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
-                          {job.actualCompletionDate ? new Date(job.actualCompletionDate).toLocaleDateString() : '—'}
+                          {isDone || job.completedDate || job.actualCompletionDate ? (
+                            <span className="font-semibold text-slate-800">
+                              {formatJobDate(job.completedDate || job.actualCompletionDate)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-medium">—</span>
+                          )}
                         </td>
                       )}
 
-                      {/* Completion Variance */}
+                      {/* Completion Result */}
                       {columnVisibility.completionVariance && (
                         <td className="py-3 px-3 font-semibold whitespace-nowrap">
-                          {job.completionVariance}
+                          {isDone || job.completedDate || job.actualCompletionDate ? (
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              job.daysVariance > 0 
+                                ? 'bg-rose-100 text-rose-800' 
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {job.daysVariance > 0 
+                                ? `Completed ${job.daysVariance} ${job.daysVariance === 1 ? 'Day' : 'Days'} Late` 
+                                : job.daysVariance < 0 
+                                  ? `Completed ${Math.abs(job.daysVariance)} ${Math.abs(job.daysVariance) === 1 ? 'Day' : 'Days'} Early` 
+                                  : 'Completed On Time'}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-medium">—</span>
+                          )}
                         </td>
                       )}
 
@@ -1131,27 +1455,104 @@ export default function AdminOversightDashboard() {
         </div>
       </div>
 
-      {/* 5. USER WORKLOAD & DELAY VIEW ("Who Is Working On What?") */}
+      {/* CHARTS SECTION (When placement is 'after' table) */}
+      {chartPlacement === 'after' && renderChartsSection()}
+
+      {/* 5. USERS WORKLOAD & DELAY */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
-              <Users size={16} className="text-purple-600" />
+              <Users size={17} className="text-purple-600" />
               <h2 className="text-sm font-bold text-slate-900">
-                User Workload & Delay Attribution Matrix ("Who Is Working On What?")
+                Users Workload & Delay
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Separates workload capacity from blame: evaluates underlying dependency delays before attributing responsibility.
+              Operational workload and delay metrics per employee categorized by department.
             </p>
+          </div>
+
+          {/* Department Dropdown & Search Bar Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Department Dropdown Selector */}
+            <div className="relative">
+              <select
+                value={selectedUserDept}
+                onChange={(e) => setSelectedUserDept(e.target.value)}
+                className="pl-3 pr-8 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+              >
+                <option value="all">🏢 Department: All Departments ({userAccountability.length})</option>
+                {userDepartmentOptions.map(dept => (
+                  <option key={dept.name} value={dept.name}>
+                    {dept.name} ({dept.count} Members {dept.active > 0 ? `• ${dept.active} Active` : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Quick Search */}
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search employee..."
+                value={userSearchText}
+                onChange={(e) => setUserSearchText(e.target.value)}
+                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36 sm:w-44 text-slate-800 placeholder-slate-400"
+              />
+              {userSearchText && (
+                <button
+                  onClick={() => setUserSearchText('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+
+            {/* Only With Work Toggle */}
+            <button
+              onClick={() => setOnlyUsersWithWork(!onlyUsersWithWork)}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                onlyUsersWithWork
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {onlyUsersWithWork ? 'Showing Active/Assigned' : 'All Members'}
+            </button>
           </div>
         </div>
 
+        {/* Selected Department Summary Banner */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gradient-to-r from-slate-50 to-indigo-50/40 rounded-xl border border-slate-200/80 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-slate-900 text-xs">{selectedDeptStats.name}</span>
+            <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 font-bold text-slate-600 text-[10px]">
+              {selectedDeptStats.totalUsers} Total Members
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs font-medium">
+            <span className="text-slate-600">
+              Active: <strong className="text-indigo-700">{selectedDeptStats.active}</strong>
+            </span>
+            <span className="text-slate-600">
+              Overdue: <strong className={selectedDeptStats.overdue > 0 ? 'text-rose-700 font-bold' : 'text-slate-700'}>{selectedDeptStats.overdue}</strong>
+            </span>
+            <span className="text-slate-600">
+              Completed: <strong className="text-emerald-700">{selectedDeptStats.completed}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Table Display with Column 1: Users Workload and Delay */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-extrabold tracking-wider">
-                <th className="py-2.5 px-3">User</th>
+              <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700 uppercase text-[10px] font-extrabold tracking-wider whitespace-nowrap">
+                <th className="py-2.5 px-3 font-black text-slate-900">Users Workload and Delay</th>
                 <th className="py-2.5 px-3">Department</th>
                 <th className="py-2.5 px-3 text-center">Active Jobs</th>
                 <th className="py-2.5 px-3 text-center">Overdue</th>
@@ -1162,26 +1563,98 @@ export default function AdminOversightDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {userAccountability.map(u => (
-                <tr key={u.userId} className="hover:bg-slate-50/80">
-                  <td className="py-2.5 px-3 font-bold text-slate-900">{u.userName}</td>
-                  <td className="py-2.5 px-3 text-slate-600 capitalize">{u.department}</td>
-                  <td className="py-2.5 px-3 text-center font-bold text-indigo-700">{u.activeAssignedJobs}</td>
-                  <td className="py-2.5 px-3 text-center">
-                    {u.overdueCount > 0 ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
-                        {u.overdueCount}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">0</span>
-                    )}
+              {filteredUserWorkload.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                    <span>No members match the selected department or search filter.</span>
                   </td>
-                  <td className="py-2.5 px-3 text-center font-semibold text-emerald-700">{u.completedCount}</td>
-                  <td className="py-2.5 px-3 text-center font-semibold text-rose-700">{u.completedLateCount || 0}</td>
-                  <td className="py-2.5 px-3 text-center text-slate-600">{u.reassignedCount}</td>
-                  <td className="py-2.5 px-3 text-slate-500">{u.oldestActiveJob || '—'}</td>
                 </tr>
-              ))}
+              ) : (
+                filteredUserWorkload.map(u => {
+                  const hasActive = (u.activeJobs || 0) > 0;
+                  const hasOverdue = (u.overdueJobs || 0) > 0;
+
+                  return (
+                    <tr
+                      key={u.userId}
+                      className={`hover:bg-slate-50/80 transition-colors ${
+                        hasOverdue ? 'bg-rose-50/20' : hasActive ? 'bg-indigo-50/15' : ''
+                      }`}
+                    >
+                      {/* Users Workload and Delay (Employee Name) */}
+                      <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span>{u.userName}</span>
+                          {hasActive && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="Active backlog"></span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Department */}
+                      <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                        {u.department}
+                      </td>
+
+                      {/* Active Jobs */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {hasActive ? (
+                          <button
+                            onClick={() => setFilters(prev => ({ ...prev, search: u.userName, jobStatus: 'active' }))}
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 hover:bg-indigo-200 cursor-pointer"
+                            title="Click to filter table above for this user's active jobs"
+                          >
+                            {u.activeJobs} Active
+                          </button>
+                        ) : (
+                          <span className="text-slate-400 font-medium">0</span>
+                        )}
+                      </td>
+
+                      {/* Overdue */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {hasOverdue ? (
+                          <button
+                            onClick={() => setFilters(prev => ({ ...prev, search: u.userName, delayStatus: 'OVERDUE' }))}
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 hover:bg-rose-200 cursor-pointer"
+                            title="Click to filter table above for this user's overdue jobs"
+                          >
+                            {u.overdueJobs} Overdue
+                          </button>
+                        ) : (
+                          <span className="text-slate-400 font-medium">0</span>
+                        )}
+                      </td>
+
+                      {/* Completed */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap font-semibold text-emerald-700">
+                        {u.completedJobs || 0}
+                      </td>
+
+                      {/* Completed Late */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap font-semibold text-rose-700">
+                        {u.completedLate || u.completedLateJobs || 0}
+                      </td>
+
+                      {/* Reassigned To */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap text-slate-600">
+                        {u.reassignedToCount || 0}
+                      </td>
+
+                      {/* Oldest Active Job */}
+                      <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                        {u.oldestActiveJob !== '—' && u.oldestActiveJob ? (
+                          <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 text-[11px]">
+                            {u.oldestActiveJob}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -1195,7 +1668,7 @@ export default function AdminOversightDashboard() {
             <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-black text-amber-400">Job #{selectedJobDrawer.jobNo}</h3>
+                  <h3 className="text-lg font-black text-amber-400">Job {selectedJobDrawer.jobNo}</h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white">
                     {selectedJobDrawer.currentStage}
                   </span>
@@ -1215,30 +1688,89 @@ export default function AdminOversightDashboard() {
             {/* Drawer Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs text-slate-700">
               
-              {/* Schedule Block */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Schedule & Commitments</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Original Planned Start:</span>
-                    <strong className="text-slate-800">{selectedJobDrawer.expectedStart ? new Date(selectedJobDrawer.expectedStart).toLocaleDateString() : '—'}</strong>
+              {/* Schedule & Dates Block (Simplified 3-Date Spec: Original Date -> Expected Date -> Completed Date) */}
+              {(() => {
+                const drawerIsDone = selectedJobDrawer.todayStatus === 'COMPLETED' || Boolean(selectedJobDrawer.completedDate || selectedJobDrawer.actualCompletionDate);
+                const origDate = selectedJobDrawer.originalDate || selectedJobDrawer.originalExpectedDate;
+                const expDate = selectedJobDrawer.expectedDate || selectedJobDrawer.currentExpectedDate;
+                const compDate = selectedJobDrawer.completedDate || selectedJobDrawer.actualCompletionDate;
+                const schedDiff = selectedJobDrawer.scheduleMovementDays !== undefined 
+                  ? selectedJobDrawer.scheduleMovementDays 
+                  : getDaysDifference(expDate, origDate);
+
+                return (
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
+                        Job Dates & Commitments
+                      </h4>
+                      {schedDiff > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                          Revised by {schedDiff} {schedDiff === 1 ? 'Day' : 'Days'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+                        <span className="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Original Date</span>
+                        <strong className="text-slate-900 text-xs mt-1 block">
+                          {formatJobDate(origDate || expDate)}
+                        </strong>
+                        <span className="text-[9px] text-slate-400 mt-0.5 block">{origDate ? 'First Planned' : 'Initial Target'}</span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+                        <span className="text-indigo-600 block text-[10px] font-bold uppercase tracking-wider">Expected Date</span>
+                        <strong className="text-indigo-700 text-xs mt-1 block">
+                          {formatJobDate(expDate)}
+                        </strong>
+                        <span className="text-[9px] text-indigo-400 mt-0.5 block">
+                          {selectedJobDrawer.revisionsCount > 0 ? `Revised (${selectedJobDrawer.revisionsCount}x)` : 'Current Commitment'}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+                        <span className="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Completed Date</span>
+                        <strong className={`text-xs mt-1 block ${drawerIsDone ? 'text-emerald-700' : 'text-slate-400'}`}>
+                          {drawerIsDone ? formatJobDate(compDate) : '—'}
+                        </strong>
+                        <span className="text-[9px] text-slate-400 mt-0.5 block">
+                          {drawerIsDone ? 'Completed' : 'Not Completed'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Outcome / Variance Footer */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs">
+                      <span className="text-slate-500 font-medium">Outcome / Result:</span>
+                      <div>
+                        {drawerIsDone ? (
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            selectedJobDrawer.daysVariance > 0 
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200' 
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {selectedJobDrawer.daysVariance > 0 
+                              ? `Completed ${selectedJobDrawer.daysVariance} ${selectedJobDrawer.daysVariance === 1 ? 'Day' : 'Days'} Late` 
+                              : selectedJobDrawer.daysVariance < 0 
+                                ? `Completed ${Math.abs(selectedJobDrawer.daysVariance)} ${Math.abs(selectedJobDrawer.daysVariance) === 1 ? 'Day' : 'Days'} Early` 
+                                : 'Completed On Time'}
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            selectedJobDrawer.todayStatus === 'OVERDUE' ? 'bg-rose-100 text-rose-800' :
+                            selectedJobDrawer.todayStatus === 'AT_RISK' ? 'bg-amber-100 text-amber-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {selectedJobDrawer.todayStatus === 'OVERDUE' ? `${selectedJobDrawer.daysVariance}d Overdue` : selectedJobDrawer.todayStatus}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Original Expected Date:</span>
-                    <strong className="text-slate-900">{selectedJobDrawer.originalExpectedDate ? new Date(selectedJobDrawer.originalExpectedDate).toLocaleDateString() : '—'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Current Expected Date:</span>
-                    <strong className="text-indigo-700">{selectedJobDrawer.currentExpectedDate ? new Date(selectedJobDrawer.currentExpectedDate).toLocaleDateString() : '—'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Days Variance:</span>
-                    <strong className={selectedJobDrawer.daysVariance > 0 ? 'text-rose-600' : 'text-emerald-600'}>
-                      {selectedJobDrawer.daysVariance > 0 ? `+${selectedJobDrawer.daysVariance} Days Overdue` : 'On Schedule'}
-                    </strong>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* 7 Distinct Roles Accountability Matrix (Section 10 Spec) */}
               <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2 shadow-2xs">
@@ -1337,7 +1869,7 @@ export default function AdminOversightDashboard() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Job #{revisionModal.job?.jobNo} — Original commitment date is preserved in database history.
+              Job {revisionModal.job?.jobNo} — Original commitment date is preserved in database history.
             </p>
 
             <form onSubmit={handleSubmitRevision} className="space-y-3.5 text-xs">
@@ -1412,7 +1944,7 @@ export default function AdminOversightDashboard() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Job #{reviewModal.job?.jobNo} ({reviewModal.job?.clientName})
+              Job {reviewModal.job?.jobNo} ({reviewModal.job?.clientName})
             </p>
 
             <form onSubmit={handleSubmitReview} className="space-y-3.5 text-xs">

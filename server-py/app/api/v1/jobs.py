@@ -25,20 +25,57 @@ def can_manage_core(user: UserPayload) -> bool:
 
 def visible_departments_for_job(job: Job) -> list[str]:
     visible = set()
-    if job.target_department:
-        visible.add(job.target_department)
-    if job.visible_to_departments:
-        for d in job.visible_to_departments:
-            if d:
-                visible.add(d)
+    raw_vis = [d.lower().strip() for d in (job.visible_to_departments or []) if d and str(d).strip()]
+    
+    # If explicitly assigned a specific subset of departments (< 5), that takes precedence
+    if raw_vis and len(set(raw_vis)) < 5:
+        for d in raw_vis:
+            visible.add(d)
+        if job.target_department:
+            visible.add(job.target_department.lower().strip())
+        return list(visible)
+
+    # Otherwise, deduce dynamically:
+    # 1. Target department is always visible
+    tgt = (job.target_department or "").lower().strip()
+    if tgt:
+        visible.add(tgt)
+
+    # 2. Departments with active form fields
     fields = job.fields or {}
     for dept, f in fields.items():
         if f and isinstance(f, dict) and len(f) > 0:
-            visible.add(dept)
+            visible.add(dept.lower().strip())
+
+    # 3. Departments with assigned engineers
     engineers = job.engineers or {}
     for dept, engs in engineers.items():
         if engs and isinstance(engs, list) and len(engs) > 0:
-            visible.add(dept)
+            visible.add(dept.lower().strip())
+
+    # 4. Handover indicators
+    if job.data_given_to_design and str(job.data_given_to_design).strip():
+        visible.add("design")
+    h_status = (job.handover_status or "").lower()
+    if "design" in h_status:
+        visible.add("design")
+    if "mechanical" in h_status:
+        visible.add("mechanical")
+
+    # 5. Department status for non-marketing departments or when target is marketing
+    dept_status = job.department_status or {}
+    for d, st in dept_status.items():
+        d_lower = d.lower().strip()
+        if d_lower == "marketing":
+            if tgt == "marketing" or bool(fields.get("marketing")) or bool(engineers.get("marketing")):
+                visible.add("marketing")
+        elif st and str(st).lower() in ["completed", "in_progress", "in progress", "active", "submitted", "ready"]:
+            visible.add(d_lower)
+
+    # If completely empty, default to target_department or 'marketing'
+    if not visible:
+        visible.add(tgt if tgt else "marketing")
+
     return list(visible)
 
 def format_job_row(j: Job, department: str | None = None) -> dict:
@@ -54,7 +91,7 @@ def format_job_row(j: Job, department: str | None = None) -> dict:
     )
 
     return {
-        "id": j.external_id,
+        "id": j.external_id or j.id,
         "clientId": j.client_id,
         "clientName": j.client_name or "",
         "srNo": j.sr_no,
@@ -62,15 +99,15 @@ def format_job_row(j: Job, department: str | None = None) -> dict:
         "panelName": j.panel_name or "",
         "qty": j.qty or "1",
         "projectName": j.project_name or "",
-        "typeOfIndustries": j.type_of_industries or "",
-        "incomerRating": j.incomer_rating or "",
-        "typeOfPanel": j.type_of_panel or "",
-        "responsibleEnggName": j.responsible_engg_name or "",
-        "poNo": j.po_no or "",
-        "poDate": j.po_date or "",
-        "deliveryPeriod": j.delivery_period or "",
-        "deliveryDate": j.delivery_date or "",
-        "dataGivenToDesign": j.data_given_to_design or "",
+        "typeOfIndustries": j.type_of_industries or (fields_dict.get("marketing") or {}).get("Type of Industries") or "",
+        "incomerRating": j.incomer_rating or (fields_dict.get("marketing") or {}).get("Incomer Rating") or "",
+        "typeOfPanel": j.type_of_panel or (fields_dict.get("marketing") or {}).get("Type of Panel") or "",
+        "responsibleEnggName": j.responsible_engg_name or (fields_dict.get("marketing") or {}).get("Responsible Engg. Name") or (fields_dict.get("marketing") or {}).get("Responsible Engg Name") or "",
+        "poNo": j.po_no or (fields_dict.get("marketing") or {}).get("Purchase Order") or (fields_dict.get("marketing") or {}).get("poNo") or "",
+        "poDate": j.po_date or (fields_dict.get("marketing") or {}).get("Purchase Order Date") or (fields_dict.get("marketing") or {}).get("poDate") or "",
+        "deliveryPeriod": j.delivery_period or (fields_dict.get("marketing") or {}).get("Delivery Period as per P.O.") or (fields_dict.get("marketing") or {}).get("deliveryPeriod") or "",
+        "deliveryDate": j.delivery_date or (fields_dict.get("marketing") or {}).get("Delivery Date as per P.O.") or (fields_dict.get("marketing") or {}).get("deliveryDate") or "",
+        "dataGivenToDesign": j.data_given_to_design or (fields_dict.get("marketing") or {}).get("Data Given To Design Dept.") or (fields_dict.get("marketing") or {}).get("Data Given To Design") or "",
         "deliveryAddress": j.delivery_address or "",
         "contactPerson": j.contact_person or "",
         "ttl": j.ttl or "",
@@ -103,6 +140,8 @@ def format_job_row(j: Job, department: str | None = None) -> dict:
         "planningOwnerId": j.planning_owner_id,
         "planningOwnerName": j.planning_owner_name or "",
         "handoverSubmittedAt": j.handover_submitted_at.isoformat() if j.handover_submitted_at else None,
+        "handoverSubmittedBy": (j.handover_checklist or {}).get("submitted_by", ""),
+        "handoverNotes": j.handover_notes or "",
         "handoverAcceptedAt": j.handover_accepted_at.isoformat() if j.handover_accepted_at else None,
         "handoverReturnReason": j.handover_return_reason or "",
         "handoverChecklist": j.handover_checklist or {},
@@ -164,19 +203,38 @@ async def list_jobs(
     res = await db.execute(stmt)
     jobs = list(res.scalars().all())
 
+    is_admin = (
+        current_user.role in ["admin", "executive"]
+        or (current_user.username or "").lower() in ["keval v shah", "keval", "kevalvshah", "admin", "admin2"]
+    )
+    user_depts = [d.lower() for d in (current_user.departments or [])]
+
+    # Department filtering & security isolation
+    effective_dept = department
+    if not is_admin:
+        # Department users are locked strictly to their own authorized department(s)
+        # If an explicit department is requested, it must be within user_depts
+        target_dept = department.lower() if (department and department.lower() in user_depts) else (user_depts[0] if user_depts else None)
+        effective_dept = target_dept
+        if target_dept:
+            jobs = [j for j in jobs if target_dept in visible_departments_for_job(j)]
+        elif user_depts:
+            jobs = [j for j in jobs if any(d in visible_departments_for_job(j) for d in user_depts)]
+    else:
+        # Admin / Keval V Shah can filter by any department from dropdown or view all
+        if department and department.lower() != "all":
+            jobs = [j for j in jobs if department.lower() in visible_departments_for_job(j)]
+
     # In-memory or relational filtering
     if client:
         jobs = [j for j in jobs if str(j.client_id) == client or (j.client_name and client.lower() in j.client_name.lower())]
-
-    if department:
-        jobs = [j for j in jobs if department in visible_departments_for_job(j)]
 
     if user_name:
         needle = user_name.strip().upper()
         filtered = []
         for j in jobs:
             eng_map = j.engineers or {}
-            scopes = [department] if department else list(eng_map.keys())
+            scopes = [effective_dept] if effective_dept else list(eng_map.keys())
             matched = False
             for dept_key in scopes:
                 for name in eng_map.get(dept_key, []):
@@ -189,21 +247,279 @@ async def list_jobs(
                 filtered.append(j)
         jobs = filtered
 
-    if search:
-        s = search.strip().lower()
+    if search and search.strip():
+        q = search.strip().lower()
         jobs = [
             j for j in jobs
-            if s in (j.job_no or "").lower()
-            or s in (j.panel_name or "").lower()
-            or s in (j.project_name or "").lower()
-            or s in (j.client_name or "").lower()
+            if q in (j.job_no or "").replace("#", "").strip().lower()
+            or q in (j.job_no or "").strip().lower()
+            or q in (j.client_name or "").lower()
+            or q in (j.project_name or "").lower()
+            or q in (j.panel_name or "").lower()
+            or q in (j.responsible_engg_name or "").lower()
         ]
 
     if selectedOnly == "true":
         jobs = [j for j in jobs if j.selected]
 
-    rows = [format_job_row(j, department) for j in jobs]
+    rows = [format_job_row(j, effective_dept) for j in jobs]
     return {"count": len(rows), "jobs": rows}
+
+# GET /api/jobs/marketing-dashboard
+@router.get("/marketing-dashboard")
+async def get_marketing_dashboard(
+    scope: str = Query("all"),
+    search: str | None = Query(None),
+    status: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    from datetime import datetime, timezone
+
+    stmt = select(Job).order_by(Job.id.desc())
+    res = await db.execute(stmt)
+    all_jobs = list(res.scalars().all())
+
+    user_role = (user.role or "").lower()
+    user_depts = [d.lower() for d in (user.departments or [])]
+    is_mkt_lead = user_role in ["mktadmin", "marketing_lead", "admin", "executive"]
+    user_name_lower = (user.name or user.username or "").strip().lower()
+
+    # Marketing scope filter
+    mkt_jobs = []
+    for j in all_jobs:
+        vis_depts = [d.lower() for d in (j.visible_to_departments or visible_departments_for_job(j))]
+        tgt = (j.target_department or "").lower()
+        has_mkt_data = bool((j.fields or {}).get("marketing"))
+        is_mkt = "marketing" in vis_depts or tgt == "marketing" or has_mkt_data
+        if is_mkt:
+            mkt_jobs.append(j)
+
+    if scope == "my":
+        scoped_jobs = []
+        for j in mkt_jobs:
+            is_resp = (j.responsible_engg_name or "").strip().lower() == user_name_lower or j.assigned_engineer_id == user.id
+            is_creator = (j.createdBy or "").strip().lower() == (user.username or "").strip().lower()
+            if is_resp or is_creator or is_mkt_lead:
+                scoped_jobs.append(j)
+    else:
+        scoped_jobs = mkt_jobs
+
+    now = datetime.now(timezone.utc)
+    today_dt = now.date()
+
+    # Pre-calculate overall stats & counts across all scoped marketing jobs
+    active_count = 0
+    due_soon_count = 0
+    overdue_count = 0
+    handover_pending_count = 0
+
+    tab_counts = {
+        "all": len(scoped_jobs),
+        "my_open": 0,
+        "in_progress": 0,
+        "ready_to_release": 0,
+        "awaiting_acceptance": 0,
+        "returned": 0,
+        "overdue": 0
+    }
+
+    for j in scoped_jobs:
+        is_completed = (j.lifecycle_status or "").lower() == "completed" or j.actual_end_at is not None or (j.department_status or {}).get("dispatch") == "completed"
+        h_status = (j.handover_status or "").lower()
+        is_handed_over = "submitted" in h_status or "pending" in h_status or (j.target_department or "").lower() == "design"
+        is_returned = "returned" in h_status or bool(j.handover_return_reason)
+        is_ready = bool(j.data_given_to_design and str(j.data_given_to_design).strip()) and not is_handed_over and not is_completed
+
+        exp_date_raw = j.stage_due_date or j.planned_end_at
+        if not exp_date_raw and j.delivery_date:
+            try:
+                from datetime import datetime as dt
+                exp_date_raw = dt.fromisoformat(str(j.delivery_date)[:10]).replace(tzinfo=timezone.utc)
+            except Exception:
+                exp_date_raw = None
+
+        is_overdue = False
+        if not is_completed and exp_date_raw:
+            exp_date = exp_date_raw.date() if hasattr(exp_date_raw, "date") else exp_date_raw
+            diff_days = (exp_date - today_dt).days
+            if diff_days < 0:
+                is_overdue = True
+                overdue_count += 1
+            elif 0 <= diff_days <= 3:
+                due_soon_count += 1
+
+        if not is_completed:
+            active_count += 1
+            tab_counts["in_progress"] += 1
+            h_stat = (j.handover_status or "Draft").lower()
+            if "submitted" in h_stat or "pending" in h_stat or h_stat == "draft":
+                if (j.target_department or "").lower() in ["design", "planning", ""]:
+                    handover_pending_count += 1
+
+        is_my_job = (j.responsible_engg_name or "").strip().lower() == user_name_lower or j.assigned_engineer_id == user.id or (j.createdBy or "").strip().lower() == (user.username or "").strip().lower()
+        if is_my_job and not is_completed:
+            tab_counts["my_open"] += 1
+
+        if is_ready:
+            tab_counts["ready_to_release"] += 1
+        if is_handed_over:
+            tab_counts["awaiting_acceptance"] += 1
+        if is_returned:
+            tab_counts["returned"] += 1
+        if is_overdue:
+            tab_counts["overdue"] += 1
+
+    # Optional search filtering (alphanumeric, case-insensitive across 5 fields)
+    if search and search.strip():
+        q = search.strip().lower()
+        filtered = []
+        for j in scoped_jobs:
+            clean_no = (j.job_no or "").replace("#", "").strip().lower()
+            raw_no = (j.job_no or "").strip().lower()
+            matches_job = q in clean_no or q in raw_no
+            matches_client = q in (j.client_name or "").lower()
+            matches_project = q in (j.project_name or "").lower()
+            matches_panel = q in (j.panel_name or "").lower()
+            matches_engg = q in (j.responsible_engg_name or "").lower()
+            if matches_job or matches_client or matches_project or matches_panel or matches_engg:
+                filtered.append(j)
+        scoped_jobs = filtered
+
+    # Optional status filtering
+    if status and status != "all":
+        status_filtered = []
+        for j in scoped_jobs:
+            is_completed = (j.lifecycle_status or "").lower() == "completed" or j.actual_end_at is not None or (j.department_status or {}).get("dispatch") == "completed"
+            h_status = (j.handover_status or "").lower()
+            is_handed_over = "submitted" in h_status or "pending" in h_status or (j.target_department or "").lower() == "design"
+            is_returned = "returned" in h_status or bool(j.handover_return_reason)
+            is_ready = bool(j.data_given_to_design and str(j.data_given_to_design).strip()) and not is_handed_over and not is_completed
+
+            exp_date_raw = j.stage_due_date or j.planned_end_at
+            if not exp_date_raw and j.delivery_date:
+                try:
+                    from datetime import datetime as dt
+                    exp_date_raw = dt.fromisoformat(str(j.delivery_date)[:10]).replace(tzinfo=timezone.utc)
+                except Exception:
+                    exp_date_raw = None
+            is_overdue = False
+            if not is_completed and exp_date_raw:
+                exp_date = exp_date_raw.date() if hasattr(exp_date_raw, "date") else exp_date_raw
+                if (exp_date - today_dt).days < 0:
+                    is_overdue = True
+
+            is_my_job = (j.responsible_engg_name or "").strip().lower() == user_name_lower or j.assigned_engineer_id == user.id or (j.createdBy or "").strip().lower() == (user.username or "").strip().lower()
+
+            if status == "my_open":
+                if is_my_job and not is_completed:
+                    status_filtered.append(j)
+            elif status == "in_progress":
+                if not is_completed:
+                    status_filtered.append(j)
+            elif status == "ready_to_release":
+                if is_ready:
+                    status_filtered.append(j)
+            elif status == "awaiting_acceptance":
+                if is_handed_over:
+                    status_filtered.append(j)
+            elif status == "returned":
+                if is_returned:
+                    status_filtered.append(j)
+            elif status == "overdue":
+                if is_overdue:
+                    status_filtered.append(j)
+            else:
+                status_filtered.append(j)
+        scoped_jobs = status_filtered
+
+    formatted_rows = [format_job_row(j, "marketing") for j in scoped_jobs]
+
+    act_stmt = select(DepartmentActivity).where(DepartmentActivity.department == "marketing").order_by(DepartmentActivity.id.desc()).limit(15)
+    act_res = await db.execute(act_stmt)
+    activities = [
+        {
+            "id": a.id,
+            "jobId": a.job_id,
+            "action": a.action,
+            "updatedBy": a.updated_by,
+            "createdAt": a.created_at.isoformat() if a.created_at else None,
+            "notes": (a.new_value or {}).get("notes") or ""
+        }
+        for a in act_res.scalars().all()
+    ]
+
+    # Aggregate marketing tasks metrics
+    from app.models import MarketingTask
+    from sqlalchemy import or_
+    mkt_tasks_stmt = select(MarketingTask)
+    if scope == "my" and user.id:
+        user_name = (user.name or user.username or "").strip().lower()
+        mkt_tasks_stmt = mkt_tasks_stmt.where(
+            or_(
+                MarketingTask.assigned_to_user_id == user.id,
+                MarketingTask.created_by_user_id == user.id,
+                func.lower(MarketingTask.assigned_to_name) == user_name
+            )
+        )
+    tasks_res = await db.execute(mkt_tasks_stmt)
+    all_mkt_tasks = tasks_res.scalars().all()
+
+    my_open_tasks = 0
+    tasks_due_today = 0
+    tasks_overdue = 0
+    task_est_hrs = 0.0
+    task_act_hrs = 0.0
+    blocked_job_ids = set()
+
+    for t in all_mkt_tasks:
+        st = str(getattr(t, "status", "") or "").lower()
+        t_est = float(getattr(t, "estimated_effort", 0.0) or 0.0)
+        t_act = float(getattr(t, "actual_effort", 0.0) or 0.0)
+        t_unit = str(getattr(t, "effort_unit", "hours") or "hours")
+        est = t_est if t_unit == "hours" else (t_est / 60.0)
+        act = t_act if t_unit == "hours" else (t_act / 60.0)
+        task_est_hrs += est
+        task_act_hrs += act
+
+        if st not in ["completed", "cancelled"]:
+            my_open_tasks += 1
+            t_target = getattr(t, "target_date", None)
+            if t_target and hasattr(t_target, "isoformat"):
+                t_dt = t_target if hasattr(t_target, "year") else None
+                if t_dt:
+                    diff = (t_dt - today_dt).days
+                    if diff == 0:
+                        tasks_due_today += 1
+                    elif diff < 0:
+                        tasks_overdue += 1
+            if getattr(t, "is_mandatory_for_readiness", False):
+                blocked_job_ids.add(int(getattr(t, "job_id", 0)))
+
+    task_summary = {
+        "openTasks": my_open_tasks,
+        "dueToday": tasks_due_today,
+        "overdue": tasks_overdue,
+        "totalEstimatedHours": round(task_est_hrs, 2),
+        "totalActualHours": round(task_act_hrs, 2),
+        "jobsBlockedByTasksCount": len(blocked_job_ids)
+    }
+
+    return {
+        "jobs": formatted_rows,
+        "count": len(formatted_rows),
+        "stats": {
+            "activeJobs": active_count,
+            "dueSoon": due_soon_count,
+            "overdue": overdue_count,
+            "designHandoverPending": handover_pending_count
+        },
+        "taskSummary": task_summary,
+        "tabCounts": tab_counts,
+        "isLead": is_mkt_lead,
+        "recentActivity": activities
+    }
+
 
 # POST /api/jobs
 @router.post("")
@@ -329,6 +645,36 @@ async def clear_all_selections(
     await db.commit()
     return {"ok": True}
 
+def check_user_job_access(job: Job, user: UserPayload) -> bool:
+    user_role = (user.role or "").lower()
+    if user_role in ["admin", "executive"] or is_keval(user):
+        return True
+    if user_role in ["mktadmin", "marketing_lead"]:
+        return True
+
+    user_name_lower = (user.name or user.username or "").strip().lower()
+    user_depts = [d.lower() for d in (user.departments or [])]
+
+    # Direct assignments
+    if (job.responsible_engg_name or "").strip().lower() == user_name_lower:
+        return True
+    if job.assigned_engineer_id == user.id or job.planning_owner_id == user.id or job.current_worker_id == user.id:
+        return True
+    if (job.createdBy or "").strip().lower() == (user.username or "").strip().lower():
+        return True
+
+    # Department scopes
+    vis_depts = [d.lower() for d in (job.visible_to_departments or visible_departments_for_job(job))]
+    tgt_dept = (job.target_department or "").lower()
+
+    for dept in user_depts:
+        if dept in vis_depts or dept == tgt_dept:
+            return True
+        if job.fields and job.fields.get(dept):
+            return True
+
+    return False
+
 # GET /api/jobs/{id}
 @router.get("/{id}")
 async def get_job(
@@ -341,6 +687,13 @@ async def get_job(
     job = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    if not check_user_job_access(job, user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to view this job record."
+        )
+
     return format_job_row(job)
 
 # PATCH /api/jobs/{id}/select

@@ -8,14 +8,38 @@ import {
 } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import DepartmentMetricCard from '../components/DepartmentMetricCard';
-import JobCard from '../components/JobCard';
 import DepartmentHandoverModal from '../jobs/DepartmentHandoverModal';
+import SearchJobsSection from '../components/SearchJobsSection';
+import { isMarketingUser } from '../config/marketingFormConfig';
+import MarketingJobDashboard from './MarketingJobDashboard';
 
 const TRACKED_DEPTS = ['marketing', 'design', 'mechanical', 'purchase', 'production'];
+
+const DEPT_DISPLAY_NAMES = {
+  marketing: 'Marketing',
+  design: 'Design - Electrical',
+  mechanical: 'Design - Mechanical',
+  purchase: 'Procurement',
+  production: 'Production & QC & Dispatch',
+  dispatch: 'Production & QC & Dispatch',
+  qc: 'Production & QC & Dispatch'
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || user?.username?.toLowerCase() === 'keval v shah';
+  const isMkt = isMarketingUser(user);
+
+  // Marketing users (swatisales, swatisales2, etc.) always view the Marketing Dashboard
+  if (isMkt && !isAdmin) {
+    return <MarketingJobDashboard />;
+  }
+
+  const primaryDept = user?.departments?.[0] || '';
+  const [selectedDept, setSelectedDept] = useState(isAdmin ? 'all' : primaryDept);
+  const [viewMode, setViewMode] = useState('master');
 
   const [jobs, setJobs] = useState([]);
   const [stats, setStats] = useState(null);
@@ -23,26 +47,35 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeHandoverJob, setActiveHandoverJob] = useState(null);
 
-  // Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDept, setSelectedDept] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all'); // 'all', 'pending', 'completed'
-
-  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || user?.username?.toLowerCase() === 'keval v shah';
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  if (viewMode === 'marketing') {
+    return (
+      <div className="space-y-4">
+        {isAdmin && (
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={() => setViewMode('master')}
+              className="text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition-all"
+            >
+              ← Back to Master Planning Register
+            </button>
+          </div>
+        )}
+        <MarketingJobDashboard />
+      </div>
+    );
+  }
 
   const fetchData = async () => {
     try {
       setRefreshing(true);
+      const deptParam = (isAdmin && selectedDept !== 'all')
+        ? `?department=${selectedDept}`
+        : (!isAdmin && primaryDept ? `?department=${primaryDept}` : '');
       const [jobsRes, statsRes] = await Promise.all([
-        api.get('/jobs'),
+        api.get(`/jobs${deptParam}`),
         api.get('/jobs/stats')
       ]);
 
-      // Handle payload structure { count: N, jobs: [...] } or array
       const rawJobs = jobsRes.data?.jobs || (Array.isArray(jobsRes.data) ? jobsRes.data : []);
       setJobs(rawJobs);
       setStats(statsRes.data);
@@ -54,45 +87,16 @@ export default function Dashboard() {
     }
   };
 
-  // Filtered jobs memo
-  const filteredJobs = useMemo(() => {
-    return jobs.filter(job => {
-      // Search filter
-      if (searchTerm) {
-        const q = searchTerm.toLowerCase();
-        const matchesJobNo = String(job.jobNo || '').toLowerCase().includes(q);
-        const matchesClient = String(job.clientName || '').toLowerCase().includes(q);
-        const matchesPanel = String(job.panelName || '').toLowerCase().includes(q);
-        const matchesProject = String(job.projectName || '').toLowerCase().includes(q);
-        const matchesEngg = String(job.responsibleEnggName || '').toLowerCase().includes(q);
-        if (!matchesJobNo && !matchesClient && !matchesPanel && !matchesProject && !matchesEngg) {
-          return false;
-        }
-      }
-
-      // Department filter
-      if (selectedDept !== 'all') {
-        const visibleDepts = job.visibleToDepartments || [];
-        const hasDeptData = (job.fields && job.fields[selectedDept]) || (job.targetDepartment === selectedDept);
-        if (!visibleDepts.includes(selectedDept) && !hasDeptData) {
-          return false;
-        }
-      }
-
-      // Status filter
-      if (selectedStatus !== 'all') {
-        const isDispatched = (job.departmentStatus || {}).dispatch === 'completed';
-        if (selectedStatus === 'completed' && !isDispatched) return false;
-        if (selectedStatus === 'pending' && isDispatched) return false;
-      }
-
-      return true;
-    });
-  }, [jobs, searchTerm, selectedDept, selectedStatus]);
+  useEffect(() => {
+    fetchData();
+  }, [selectedDept]);
 
   // Unique clients count
   const uniqueClientsCount = useMemo(() => {
-    const clients = new Set(jobs.map(j => j.clientName).filter(Boolean));
+    const clients = new Set();
+    jobs.forEach(j => {
+      if (j.clientName) clients.add(j.clientName.trim());
+    });
     return clients.size;
   }, [jobs]);
 
@@ -120,23 +124,28 @@ export default function Dashboard() {
             </button>
           </h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">
-            Real-time departmental workflow tracking & master job register
+            {isAdmin
+              ? 'Real-time departmental workflow tracking & master job register'
+              : `${primaryDept ? primaryDept.toUpperCase() : 'Department'} live workflow & project records`}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/jobs/handover')}
-            className="relative inline-flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3.5 py-2.5 rounded-xl border border-indigo-200 transition-all text-sm"
-          >
-            <ArrowRightLeft size={16} />
-            Planning Control Center
-            {pendingHandoversCount > 0 && (
-              <span className="bg-amber-500 text-white text-[11px] font-black px-1.5 py-0.5 rounded-full shadow-xs">
-                {pendingHandoversCount}
-              </span>
-            )}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/jobs/handover')}
+              className="relative inline-flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3.5 py-2.5 rounded-xl border border-indigo-200 transition-all text-sm"
+            >
+              <ArrowRightLeft size={16} />
+              Planning Control Center
+              {pendingHandoversCount > 0 && (
+                <span className="bg-amber-500 text-white text-[11px] font-black px-1.5 py-0.5 rounded-full shadow-xs">
+                  {pendingHandoversCount}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={() => navigate('/my-jobs')}
             className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 transition-all text-sm"
@@ -144,6 +153,7 @@ export default function Dashboard() {
             <Layers size={16} />
             My Jobs
           </button>
+
           <button
             onClick={() => navigate('/jobs/new')}
             className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm"
@@ -170,12 +180,14 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/jobs/handover')}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors shrink-0"
-          >
-            Open Planning Control Center →
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/jobs/handover')}
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors shrink-0"
+            >
+              Open Planning Control Center →
+            </button>
+          )}
         </div>
       )}
 
@@ -207,14 +219,18 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Department Pipeline Cards Grid */}
+      {/* Department Pipeline Cards Grid (for Admins or Department Context) */}
       <div>
         <div className="flex items-center justify-between mb-3.5">
           <div>
             <h2 className="text-base font-bold text-slate-800">Department Workflow Pipeline</h2>
-            <p className="text-xs text-slate-500">Click any card to filter jobs by that department</p>
+            <p className="text-xs text-slate-500">
+              {isAdmin
+                ? 'Click any card to filter jobs by department'
+                : 'Live departmental progress and status metrics'}
+            </p>
           </div>
-          {selectedDept !== 'all' && (
+          {isAdmin && selectedDept !== 'all' && (
             <button
               onClick={() => setSelectedDept('all')}
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
@@ -231,173 +247,29 @@ export default function Dashboard() {
               deptKey={deptKey}
               stats={stats?.[deptKey]}
               isSelected={selectedDept === deptKey}
-              onClick={() => setSelectedDept(prev => prev === deptKey ? 'all' : deptKey)}
+              onClick={() => {
+                if (isAdmin) {
+                  setSelectedDept(prev => prev === deptKey ? 'all' : deptKey);
+                }
+              }}
             />
           ))}
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs space-y-3">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by Job No, Client, Panel Name, Project, Engineer..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
+      {/* Universal Search Jobs Section (Visual Reference 9 Columns & Blue-and-White Theme) */}
+      <SearchJobsSection
+        jobs={jobs}
+        loading={loading}
+        onRefresh={fetchData}
+        isAdmin={isAdmin}
+        selectedDept={selectedDept}
+        onDeptChange={(newDept) => setSelectedDept(newDept)}
+        userDeptName={isAdmin ? '' : (DEPT_DISPLAY_NAMES[primaryDept] || (primaryDept ? primaryDept.toUpperCase() : ''))}
+        onHandoverClick={(job) => setActiveHandoverJob(job)}
+      />
 
-          {/* Status Filter Buttons */}
-          <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl self-start md:self-auto shrink-0">
-            <button
-              onClick={() => setSelectedStatus('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'all'
-                  ? 'bg-white text-slate-800 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              All Jobs ({jobs.length})
-            </button>
-            <button
-              onClick={() => setSelectedStatus('pending')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'pending'
-                  ? 'bg-white text-amber-700 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              In Progress
-            </button>
-            <button
-              onClick={() => setSelectedStatus('completed')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'completed'
-                  ? 'bg-white text-emerald-700 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Completed
-            </button>
-          </div>
-        </div>
-
-        {/* Active Filter Chips */}
-        {(selectedDept !== 'all' || selectedStatus !== 'all' || searchTerm) && (
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
-            <span className="font-semibold">Active Filters:</span>
-            {selectedDept !== 'all' && (
-              <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-200">
-                Dept: {selectedDept}
-                <X size={12} className="cursor-pointer" onClick={() => setSelectedDept('all')} />
-              </span>
-            )}
-            {selectedStatus !== 'all' && (
-              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-medium border border-amber-200">
-                Status: {selectedStatus}
-                <X size={12} className="cursor-pointer" onClick={() => setSelectedStatus('all')} />
-              </span>
-            )}
-            {searchTerm && (
-              <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium">
-                "{searchTerm}"
-                <X size={12} className="cursor-pointer" onClick={() => setSearchTerm('')} />
-              </span>
-            )}
-            <span className="ml-auto text-slate-400 font-medium">
-              Showing {filteredJobs.length} of {jobs.length} jobs
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Master Job Cards Grid */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-black text-slate-800 tracking-tight">
-            Job Cards
-            <span className="ml-2 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded-full">
-              {filteredJobs.length}
-            </span>
-          </h2>
-        </div>
-
-        {loading ? (
-          /* Skeleton Loader Cards */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {[1, 2, 3, 4].map(n => (
-              <div key={n} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs animate-pulse space-y-4">
-                <div className="flex justify-between">
-                  <div className="h-5 w-16 bg-slate-200 rounded-md" />
-                  <div className="h-5 w-24 bg-slate-200 rounded-full" />
-                </div>
-                <div className="h-5 w-3/4 bg-slate-200 rounded-md" />
-                <div className="h-4 w-1/2 bg-slate-100 rounded-md" />
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <div className="h-8 bg-slate-100 rounded-lg" />
-                  <div className="h-8 bg-slate-100 rounded-lg" />
-                </div>
-                <div className="h-10 bg-slate-100 rounded-lg" />
-              </div>
-            ))}
-          </div>
-        ) : filteredJobs.length === 0 ? (
-          /* Empty State */
-          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center max-w-md mx-auto my-8">
-            <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400 mb-4">
-              <Search size={28} />
-            </div>
-            <h3 className="text-base font-bold text-slate-800">No matching jobs found</h3>
-            <p className="text-xs text-slate-500 mt-1 mb-6">
-              Try adjusting your search terms, changing the department filter, or create a new job.
-            </p>
-            <div className="flex justify-center gap-3">
-              {(searchTerm || selectedDept !== 'all' || selectedStatus !== 'all') && (
-                <button
-                  onClick={() => { setSearchTerm(''); setSelectedDept('all'); setSelectedStatus('all'); }}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                >
-                  Clear All Filters
-                </button>
-              )}
-              <button
-                onClick={() => navigate('/jobs/new')}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-              >
-                + New Job
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Cards Grid */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filteredJobs.map(job => (
-              <JobCard
-                key={job.id}
-                job={job}
-                onView={id => navigate(`/jobs/${id}`)}
-                onEdit={id => navigate(`/jobs/edit/${id}`)}
-                onHandover={selectedJob => setActiveHandoverJob(selectedJob)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Handover Modal */}
+      {/* Department Handover Modal */}
       {activeHandoverJob && (
         <DepartmentHandoverModal
           job={activeHandoverJob}

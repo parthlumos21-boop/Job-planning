@@ -6,8 +6,9 @@ import Sidebar from '../components/Sidebar';
 import {
   LayoutDashboard, PlusCircle, Briefcase,
   FileBarChart, User, LogOut, Activity, FileText,
-  UserCheck, ArrowRightLeft, ShieldCheck, History
+  UserCheck, ArrowRightLeft, ShieldCheck, History, Search, CheckSquare
 } from 'lucide-react';
+import { isMarketingUser } from '../config/marketingFormConfig';
 
 const DEPT_DISPLAY_NAMES = {
   marketing: 'Marketing',
@@ -73,27 +74,31 @@ export default function Layout() {
     navigate('/login');
   };
 
+  const isMarketing = isMarketingUser(user) || isAdmin;
+
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+    { to: '/search-jobs', label: 'Search Jobs', icon: <Search size={20} /> },
     { to: '/jobs/new', label: 'New Job', icon: <PlusCircle size={20} /> },
-    { to: '/my-jobs', label: 'My Jobs', icon: <UserCheck size={20} /> },
-    { to: '/jobs/handover', label: 'Planning Control Center', icon: <ArrowRightLeft size={20} />, badge: pendingHandoverCount },
-    { to: '/jobs', label: 'View Jobs', icon: <Briefcase size={20} /> },
   ];
 
+  if (isMarketing) {
+    navItems.push({ to: '/my-tasks', label: 'My Tasks', icon: <CheckSquare size={20} /> });
+  }
+
+  navItems.push({ to: '/my-jobs', label: 'My Jobs', icon: <UserCheck size={20} /> });
+
   if (isAdmin) {
+    navItems.push({ to: '/jobs/handover', label: 'Planning Control Center', icon: <ArrowRightLeft size={20} />, badge: pendingHandoverCount });
     navItems.push({ 
       to: '/admin/dashboard', 
       label: 'Job Late for Users', 
-      icon: <ShieldCheck size={20} />,
-      badge: overdueJobCount > 0 ? overdueJobCount : undefined,
-      badgeColor: 'bg-rose-600 text-white'
+      icon: <ShieldCheck size={20} />
     });
     navItems.push({ to: '/live-activity', label: 'Live Activity', icon: <History size={20} /> });
     navItems.push({ to: '/live-monitor', label: 'Live Monitor & Analytics', icon: <Activity size={20} /> });
+    navItems.push({ to: '/reports', label: 'Reports', icon: <FileText size={20} /> });
   }
-
-  navItems.push({ to: '/reports', label: 'Reports', icon: <FileText size={20} /> });
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';

@@ -6,6 +6,7 @@ import { FileText, Loader2, Search, ChevronLeft, ChevronRight, X, ExternalLink, 
 import ExcelTable from '../components/ExcelTable';
 import { DEPARTMENT_PROGRESS } from './jobProgress';
 import DepartmentHandoverModal from './DepartmentHandoverModal';
+import { cleanJobNo, isMarketingUser } from '../config/marketingFormConfig';
 
 export default function JobList({ title }) {
   const { user } = useAuth();
@@ -181,7 +182,7 @@ export default function JobList({ title }) {
             <div>
               <div className="flex items-center gap-3">
                 <span className="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold text-xs border border-blue-200/60">
-                  Job #{selectedJob.jobNo}
+                  Job {cleanJobNo(selectedJob.jobNo)}
                 </span>
                 <h3 className="text-lg font-bold text-slate-900">
                   {selectedJob.projectName || 'Project Details'}
@@ -211,7 +212,7 @@ export default function JobList({ title }) {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
               >
                 <ExternalLink size={14} />
-                <span>View Full Job</span>
+                <span>{isMarketingUser(user) ? 'My Job Details' : 'View Full Job'}</span>
               </Link>
               <button
                 onClick={() => setSelectedJob(null)}

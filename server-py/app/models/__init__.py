@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Numeric, func, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, Text, Numeric, func, ForeignKey
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from app.db.base import Base
 
@@ -291,4 +291,38 @@ class JobTargetDateRevision(Base):
     authorized_by_id = Column(Integer, nullable=False)
     authorized_by_name = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class MarketingTask(Base):
+    __tablename__ = "marketing_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+
+    created_by_user_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    created_by_name = Column(String(255), nullable=False)
+    assigned_to_user_id = Column(Integer, ForeignKey("accounts.id"), nullable=False, index=True)
+    assigned_to_name = Column(String(255), nullable=False)
+
+    start_date = Column(Date, nullable=False)
+    target_date = Column(Date, nullable=False, index=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    estimated_effort = Column(Numeric(8, 2), default=0.00, nullable=False)
+    effort_unit = Column(String(20), default="hours", nullable=False)
+    actual_effort = Column(Numeric(8, 2), default=0.00, nullable=False)
+
+    priority = Column(String(20), default="Normal", nullable=False)
+    status = Column(String(30), default="Open", nullable=False, index=True)
+    blocked_reason = Column(Text, default="")
+    completion_remarks = Column(Text, default="")
+
+    is_mandatory_for_readiness = Column(Boolean, default=False)
+    readiness_criterion_key = Column(String(100), nullable=True)
+    attachments = Column(JSONB, default=list)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
 

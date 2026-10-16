@@ -51,11 +51,23 @@ def is_job_delayed(j: Job, now: datetime) -> tuple[bool, int]:
     
     # 1. Stage Due Date Exceeded
     stage_due = getattr(j, "stage_due_date", None)
-    if stage_due and now > stage_due:
-        days = max(1, (now - stage_due).days)
-        return True, days
+    if stage_due:
+        if now > stage_due:
+            days = max(1, (now - stage_due).days)
+            return True, days
+        else:
+            return False, 0
 
-    # 2. Delivery Date / Target Date Exceeded
+    # 2. Planned End Date Exceeded
+    p_end = getattr(j, "planned_end_at", None)
+    if p_end:
+        if now > p_end:
+            days = max(1, (now - p_end).days)
+            return True, days
+        else:
+            return False, 0
+
+    # 3. Delivery Date / Target Date Exceeded (Fallback only when stage/planned dates are not set)
     delivery_str = (getattr(j, "delivery_date", "") or getattr(j, "deliveryDate", "") or "").strip()
     if delivery_str:
         for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
@@ -271,13 +283,13 @@ async def get_accountability_monitor(
 
     # Fetch assignment histories
     hist_res = await db.execute(select(JobAssignmentHistory).order_by(JobAssignmentHistory.created_at.asc()))
-    hist_by_job: Dict[int, List[JobAssignmentHistory]] = {}
+    hist_by_job: Dict[Any, List[JobAssignmentHistory]] = {}
     for h in hist_res.scalars().all():
         hist_by_job.setdefault(h.job_id, []).append(h)
 
     # Fetch target revisions
     rev_res = await db.execute(select(JobTargetDateRevision).order_by(JobTargetDateRevision.created_at.asc()))
-    rev_by_job: Dict[int, List[JobTargetDateRevision]] = {}
+    rev_by_job: Dict[Any, List[JobTargetDateRevision]] = {}
     for r in rev_res.scalars().all():
         rev_by_job.setdefault(r.job_id, []).append(r)
 
@@ -303,9 +315,17 @@ async def get_accountability_monitor(
             else:
                 status_badge = "ON_TIME"
 
+        # Revisions & Reassignments
+        job_revisions = rev_by_job.get(j.id, [])
+        job_history = hist_by_job.get(j.id, [])
+
+        # Authentic baseline original commitment date
+        earliest_rev = job_revisions[0] if job_revisions else None
+        orig_planned = j.planned_end_at or (earliest_rev.previous_target_date if earliest_rev else None) or j.stage_due_date or j.created_at
+        cur_expected = j.stage_due_date or j.planned_end_at or orig_planned
+
         # Days variance calculation
-        p_end = j.planned_end_at
-        cur_expected = j.stage_due_date or p_end
+        p_end = orig_planned
         if is_completed:
             actual_end = j.actual_end_at or j.updated_at or now
             if p_end:
@@ -335,10 +355,6 @@ async def get_accountability_monitor(
         # Time with current owner
         owner_assigned_at = j.stage_started_at or j.created_at or now
         time_with_owner_hours = max(0, int((now - owner_assigned_at).total_seconds() // 3600))
-
-        # Revisions & Reassignments
-        job_revisions = rev_by_job.get(j.id, [])
-        job_history = hist_by_job.get(j.id, [])
 
         # Filter criteria
         if search:
@@ -407,15 +423,21 @@ async def get_accountability_monitor(
             "assignedBy": j.createdBy or "System",
             "assignedDate": j.created_at.isoformat() if j.created_at else None,
             
-            # Dates & Commitments
+            # Standardized 3 Date Names (Original Date, Expected Date, Completed Date)
+            "originalDate": orig_planned.isoformat() if orig_planned else None,
+            "expectedDate": cur_expected.isoformat() if cur_expected else None,
+            "completedDate": j.actual_end_at.isoformat() if j.actual_end_at else None,
+            
+            # Backwards-compatible date aliases
             "expectedStart": j.planned_start_at.isoformat() if j.planned_start_at else None,
-            "originalExpectedDate": j.planned_end_at.isoformat() if j.planned_end_at else None,
+            "originalExpectedDate": orig_planned.isoformat() if orig_planned else None,
             "currentExpectedDate": cur_expected.isoformat() if cur_expected else None,
             "actualCompletionDate": j.actual_end_at.isoformat() if j.actual_end_at else None,
             
-            # Status & Variance
+            # Status & Simple Variance Badges
             "todayStatus": status_badge,
             "daysVariance": variance_days,
+            "scheduleMovementDays": int((cur_expected - orig_planned).total_seconds() // 86400) if (cur_expected and orig_planned) else 0,
             "completionVariance": f"{variance_days:+d}d" if is_completed else ("—"),
             
             # Delay Reason Details
@@ -446,22 +468,22 @@ async def get_live_working_metrics(
 ):
     now = datetime.now(timezone.utc)
     res = await db.execute(select(Job).where(Job.lifecycle_status.in_(["Running", "In Progress", "Paused"])))
-    running_jobs = res.scalars().all()
+    running_jobs: List[Any] = list(res.scalars().all())
 
     u_res = await db.execute(select(User))
-    users_map = {u.id: u.name for u in u_res.scalars().all()}
+    users_map: Dict[Any, Any] = {u.id: u.name for u in u_res.scalars().all()}
 
     output = []
     for j in running_jobs:
         actual_start = j.actual_start_at or j.stage_started_at
-        total_paused = j.total_paused_seconds or 0
+        total_paused = int(j.total_paused_seconds or 0)
         if actual_start:
             elapsed_raw = max(0, int((now - actual_start).total_seconds()))
             active_sec = max(0, elapsed_raw - total_paused)
         else:
             active_sec = 0
 
-        est_sec = j.estimated_duration_seconds or 28800 # default 8 hours
+        est_sec = int(j.estimated_duration_seconds or 28800) # default 8 hours
         active_hours = round(active_sec / 3600, 2)
         expected_hours = round(est_sec / 3600, 2)
         variance_hours = round(active_hours - expected_hours, 2)
@@ -739,37 +761,52 @@ async def get_user_accountability(
     
     # 1. Fetch Users and Accounts
     users_res = await db.execute(select(User).where(User.is_active.isnot(False)).order_by(User.name.asc()))
-    users = users_res.scalars().all()
+    users: List[Any] = list(users_res.scalars().all())
 
     accounts_res = await db.execute(select(Account).order_by(Account.username.asc()))
-    accounts = accounts_res.scalars().all()
+    accounts: List[Any] = list(accounts_res.scalars().all())
 
     # 2. Fetch Jobs
     jobs_res = await db.execute(select(Job))
-    jobs = jobs_res.scalars().all()
+    jobs: List[Any] = list(jobs_res.scalars().all())
 
     # 3. Fetch Reassignments
     hist_res = await db.execute(select(JobAssignmentHistory))
-    histories = hist_res.scalars().all()
+    histories: List[Any] = list(hist_res.scalars().all())
 
     # 4. Fetch Delay Records
     delay_res = await db.execute(select(JobDelayRecord))
-    delay_records = delay_res.scalars().all()
-    delay_map: Dict[Any, JobDelayRecord] = {getattr(d, "job_id", None): d for d in delay_records}
+    delay_records: List[Any] = list(delay_res.scalars().all())
+    delay_map: Dict[Any, Any] = {getattr(d, "job_id", None): d for d in delay_records}
 
-    # Build user list
+    DEPT_MAP = {
+        "marketing": "Marketing / Sales",
+        "design": "Design - Electrical",
+        "mechanical": "Design - Mechanical",
+        "purchase": "Procurement / Purchase",
+        "production": "Production & QC & Dispatch",
+        "dispatch": "Production & QC & Dispatch",
+        "qc": "Production & QC & Dispatch"
+    }
+
+    # Build user list with departmentKey and clean display name
     seen_names = set()
     user_roster = []
 
     for u in users:
-        n = (u.name or u.username or "").strip()
+        n = (u.name or "").strip()
         if not n or n.lower() in seen_names:
             continue
         seen_names.add(n.lower())
+        u_depts = list(u.departments or [])
+        dept_key = (u_depts[0] if u_depts else "unassigned").lower()
+        dept_display = DEPT_MAP.get(dept_key, "Unassigned" if dept_key == "unassigned" else dept_key.replace("-", " ").title())
         user_roster.append({
             "id": u.id,
             "name": n,
-            "department": (u.departments[0] if u.departments else "Engineering").title()
+            "departmentKey": dept_key,
+            "department": dept_display,
+            "departments": [d.lower() for d in u_depts]
         })
 
     for a in accounts:
@@ -777,18 +814,30 @@ async def get_user_accountability(
         if not n or n.lower() in seen_names:
             continue
         seen_names.add(n.lower())
+        a_depts = list(a.departments or [])
+        is_admin_exec = (a.role in ("admin", "executive"))
+        if is_admin_exec:
+            dept_key = "executive"
+            dept_display = "Executive / Administration"
+        else:
+            dept_key = (a_depts[0] if a_depts else "unassigned").lower()
+            dept_display = DEPT_MAP.get(dept_key, "Unassigned" if dept_key == "unassigned" else dept_key.replace("-", " ").title())
         user_roster.append({
             "id": a.id,
             "name": n,
-            "department": (a.departments[0] if a.departments else a.role or "Operations").title()
+            "departmentKey": dept_key,
+            "department": dept_display,
+            "departments": [d.lower() for d in a_depts]
         })
 
     matrix = []
     for u in user_roster:
         u_name_lower = u["name"].lower()
+        u_id = u["id"]
         active_jobs = 0
         waiting_jobs = 0
         completed_jobs = 0
+        completed_late = 0
         overdue_jobs = 0
         pending_delays = 0
         oldest_pending = None
@@ -797,33 +846,38 @@ async def get_user_accountability(
         for j in jobs:
             p_owner = (j.planning_owner_name or "").lower()
             r_engg = (j.responsible_engg_name or "").lower()
+            worker_id = getattr(j, "current_worker_id", None)
 
-            is_user_job = (p_owner == u_name_lower) or (r_engg == u_name_lower)
+            # Match by ID or Name
+            is_user_job = (worker_id == u_id) or (p_owner == u_name_lower) or (r_engg == u_name_lower)
             if not is_user_job:
                 continue
 
             stage = resolve_job_stage(j)
-            if stage == "RELEASED":
+            is_done = (stage == "RELEASED" or (getattr(j, "lifecycle_status", "") or "").lower() == "completed" or getattr(j, "actual_end_at", None) is not None)
+
+            if is_done:
                 completed_jobs += 1
-            elif stage in ["PLANNING_ACTIVE", "PLANNING_ASSIGNED"]:
-                active_jobs += 1
+                p_end = getattr(j, "planned_end_at", None)
+                a_end = getattr(j, "actual_end_at", None) or getattr(j, "updated_at", None) or now
+                if p_end and a_end > p_end:
+                    completed_late += 1
             else:
-                waiting_jobs += 1
+                active_jobs += 1
+                delayed, days = is_job_delayed(j, now)
+                if delayed:
+                    overdue_jobs += 1
+                    d_rec = delay_map.get(getattr(j, "id", None))
+                    if not d_rec or d_rec.explanation_status == "REASON_PENDING":
+                        pending_delays += 1
 
-            delayed, days = is_job_delayed(j, now)
-            if delayed:
-                overdue_jobs += 1
-                d_rec = delay_map.get(getattr(j, "id", None))
-                if not d_rec or d_rec.explanation_status == "REASON_PENDING":
-                    pending_delays += 1
-
-            # Oldest job
-            c_at = getattr(j, "created_at", None)
-            if c_at and stage != "RELEASED":
-                age = (now - c_at).days
-                if age > oldest_age:
-                    oldest_age = age
-                    oldest_pending = f"Job #{j.job_no} ({age}d)"
+                # Oldest active job
+                c_at = getattr(j, "created_at", None)
+                if c_at:
+                    age = max(0, (now - c_at).days)
+                    if age >= oldest_age:
+                        oldest_age = age
+                        oldest_pending = f"Job #{j.job_no} ({age}d)"
 
         # Reassignments calculation
         reassigned_from = 0
@@ -835,22 +889,27 @@ async def get_user_accountability(
                 reassigned_to += 1
 
         matrix.append({
+            "userId": u["id"],
             "userName": u["name"],
+            "departmentKey": u["departmentKey"],
             "department": u["department"],
             "activeJobs": active_jobs,
             "waitingJobs": waiting_jobs,
             "completedJobs": completed_jobs,
+            "completedLate": completed_late,
+            "completedLateJobs": completed_late,
             "overdueJobs": overdue_jobs,
             "pendingDelayExplanations": pending_delays,
             "reassignedFromCount": reassigned_from,
             "reassignedToCount": reassigned_to,
             "totalReassignmentEvents": reassigned_from + reassigned_to,
+            "oldestActiveJob": oldest_pending or "—",
             "oldestPendingJob": oldest_pending or "No active backlog",
             "correctiveActionsPending": 1 if overdue_jobs > 2 else 0
         })
 
-    # Sort by overdue desc, then active
-    matrix.sort(key=lambda x: (x["overdueJobs"], x["activeJobs"]), reverse=True)
+    # Sort by active desc, overdue desc, then user name
+    matrix.sort(key=lambda x: (x["activeJobs"], x["overdueJobs"]), reverse=True)
     return matrix
 
 
@@ -864,7 +923,7 @@ async def review_job_delay(
 ):
     stmt = select(Job).where(or_(Job.external_id == id, Job.id == id))
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -880,7 +939,7 @@ async def review_job_delay(
 
     # Fetch or create delay record
     d_res = await db.execute(select(JobDelayRecord).where(JobDelayRecord.job_id == job.id))
-    d_rec = d_res.scalar_one_or_none()
+    d_rec: Any = d_res.scalar_one_or_none()
 
     now = datetime.now(timezone.utc)
     if not d_rec:
@@ -939,7 +998,7 @@ async def approve_deadline_revision(
 ):
     stmt = select(Job).where(or_(Job.external_id == id, Job.id == id))
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -982,7 +1041,7 @@ async def approve_deadline_revision(
     
     # Update delay record if exists
     d_res = await db.execute(select(JobDelayRecord).where(JobDelayRecord.job_id == job.id))
-    d_rec = d_res.scalar_one_or_none()
+    d_rec: Any = d_res.scalar_one_or_none()
     if d_rec:
         d_rec.revised_target_date = new_dt
         d_rec.admin_review_status = "RESOLVED"

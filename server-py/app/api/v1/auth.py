@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,7 +16,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     stmt = select(Account).where(Account.username == username)
     result = await db.execute(stmt)
-    account = result.scalar_one_or_none()
+    account: Any = result.scalar_one_or_none()
 
     if not account or not verify_password(password, account.hashed_password):
         raise HTTPException(

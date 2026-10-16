@@ -12,6 +12,8 @@ import {
   PANEL_TYPE_OPTIONS
 } from './jobDropdownOptions';
 import { getAssociatedDateField } from './jobProgress';
+import { cleanJobNo, getHandoverAccountability } from '../config/marketingFormConfig';
+import SimpleHandoverModal from './SimpleHandoverModal';
 const TRANSPORT_OPTIONS = ['Inclusive', 'Exclusive', 'Others'];
 const PACKING_OPTIONS = ['Polythene', 'Crate Wooden', 'Sea Worthy', 'Export', 'Others'];
 
@@ -238,6 +240,8 @@ export default function NewJobForm() {
   const submittingRef = useRef(false);
   
   const [jobs, setJobs] = useState([]);
+  const [currentJob, setCurrentJob] = useState(null);
+  const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState(id || '');
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -262,6 +266,7 @@ export default function NewJobForm() {
         try {
           const res = await api.get(`/jobs/${id}`);
           const job = normalizeDatesInObject(res.data);
+          setCurrentJob(job);
           setCore(marketingCoreFromJob(job));
           let loadedFields = {};
           if (showAllForms) {
@@ -509,10 +514,12 @@ export default function NewJobForm() {
     if (!jobId) {
       setCore(EMPTY_CORE);
       setDeptFields({});
+      setCurrentJob(null);
       return;
     }
     const job = jobs.find(j => j.id.toString() === jobId.toString());
     if (job) {
+      setCurrentJob(job);
       setCore(marketingCoreFromJob(job));
       setDeptFields(job.departmentFields || job.fields?.[primaryDept] || {});
     }
@@ -564,7 +571,7 @@ export default function NewJobForm() {
               <option value="">-- [Create New Job] or Select Existing Job to Update --</option>
               {jobs.map(j => (
                 <option key={j.id} value={j.id}>
-                  #{j.jobNo} - {j.panelName} ({j.clientName || 'General Client'}) — Responsible: {j.responsibleEnggName || 'N/A'}
+                  Job {cleanJobNo(j.jobNo)} - {j.panelName} ({j.clientName || 'General Client'}) — Responsible: {j.responsibleEnggName || 'N/A'}
                 </option>
               ))}
             </select>
@@ -1270,31 +1277,38 @@ export default function NewJobForm() {
           </div>
         )}
 
-        {/* Submit Actions */}
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-200">
-          <button type="button" onClick={() => navigate(-1)} className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors text-sm">
+        {/* Submit Actions: Cancel & Save Only */}
+        <div className="flex items-center justify-end gap-3 pt-5 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors text-sm"
+          >
             Cancel
           </button>
           <button
             type="button"
             onClick={(e) => handleSubmit(e, false)}
             disabled={saving}
-            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-2.5 bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-900 disabled:opacity-50 transition-colors shadow-sm text-sm"
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-50 transition-all shadow-md shadow-blue-500/20 text-sm"
           >
             {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-            <span>{saving ? 'Saving...' : 'Save Job Draft'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={(e) => handleSubmit(e, true)}
-            disabled={saving}
-            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-semibold disabled:opacity-50 transition-all shadow-md shadow-blue-500/20 text-sm hover:scale-[1.02] active:scale-[0.98]"
-          >
-            {saving ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-            <span>Save & Submit to Planning</span>
+            <span>{saving ? 'Saving...' : 'Save'}</span>
           </button>
         </div>
       </form>
+
+      {/* Simple & Unique Handover Modal */}
+      {showHandoverModal && currentJob && (
+        <SimpleHandoverModal
+          job={currentJob}
+          isOpen={showHandoverModal}
+          onClose={() => setShowHandoverModal(false)}
+          onSuccess={(updatedJob) => {
+            setCurrentJob(updatedJob);
+          }}
+        />
+      )}
     </div>
   );
 }

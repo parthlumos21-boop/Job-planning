@@ -1,10 +1,11 @@
 import io
-from typing import TypedDict, Any
+from typing import TypedDict, Any, cast
 from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import openpyxl
+from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from app.db.session import get_db
@@ -150,6 +151,14 @@ async def export_excel(
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(get_current_user)
 ):
+    if department == "marketing":
+        user_name = (user.username or user.name or "").strip().lower()
+        if user_name != "keval v shah" and (user.role or "").lower() not in ["admin", "superadmin", "executive"]:
+            raise HTTPException(
+                status_code=403,
+                detail="Marketing report export is exclusively accessible to Keval V Shah."
+            )
+
     stmt = select(Job).order_by(Job.external_id.asc())
 
     # Support filtering by comma-separated ids e.g. ?ids=1 or ?ids=1,2,3
@@ -186,7 +195,7 @@ async def export_excel(
     )
 
     for cfg in depts_to_export:
-        ws = wb.create_sheet(title=cfg["title"][:31])
+        ws = cast(Worksheet, wb.create_sheet(title=cfg["title"][:31]))
         headers = cfg["headers"]
         fill_color = cfg["color"]
         dept_key = cfg["key"]
@@ -424,8 +433,13 @@ async def export_excel(
 
         # Auto-adjust column widths
         for col in ws.columns:
+            if not col:
+                continue
+            col_idx = col[0].column
+            if col_idx is None:
+                continue
             max_len = max(len(str(cell.value or "")) for cell in col)
-            col_letter = get_column_letter(col[0].column)
+            col_letter = get_column_letter(col_idx)
             ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
     # Save to memory buffer

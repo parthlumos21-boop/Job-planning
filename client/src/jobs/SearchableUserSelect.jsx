@@ -27,7 +27,14 @@ export default function SearchableUserSelect({
         const res = await api.get('/users', { params });
         if (isMounted) {
           const list = Array.isArray(res.data) ? res.data : [];
-          setUsers(list);
+          const seen = new Set();
+          const deduped = list.filter(item => {
+            const k = item.uniqueKey || `${item.id}-${item.name}`;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          });
+          setUsers(deduped);
         }
       } catch (err) {
         console.error('Failed to load users for dropdown:', err);

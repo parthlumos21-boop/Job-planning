@@ -50,8 +50,8 @@ async def get_users(
         if department and department not in depts and a.role not in ["admin", "executive"]:
             continue
         output.append({
-            "id": a.id,
-            "externalId": a.id,
+            "id": 10000 + a.id,
+            "externalId": 10000 + a.id,
             "name": a.username,
             "username": a.username,
             "departments": depts,

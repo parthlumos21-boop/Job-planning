@@ -7,18 +7,20 @@ import {
   ArrowRightLeft, User, ShieldCheck, CheckCircle2, Clock, AlertTriangle,
   History, ChevronDown, ChevronUp, Paperclip, CheckSquare, Square,
   UserCheck, RefreshCw, AlertCircle, Send, Play, Layers, Calendar,
-  Upload, FileCheck, HelpCircle, Check, X
+  Upload, FileCheck, HelpCircle, Check, X, Eye
 } from 'lucide-react';
 import { buildJobProgressData, DEPARTMENT_PROGRESS } from './jobProgress';
 import ExcelTable from '../components/ExcelTable';
-import JobChart from '../reports/JobChart';
 import {
   AssignOwnerModal, ReassignOwnerModal, ClarificationModal,
   CorrectionModal, ReleaseModal
 } from './ControlCenterModals';
 import DepartmentHandoverModal from './DepartmentHandoverModal';
+import SimpleHandoverModal from './SimpleHandoverModal';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
+import UserJobDetail from './UserJobDetail';
+import { cleanJobNo, getHandoverAccountability, isMarketingUser } from '../config/marketingFormConfig';
 import { getHandoverBadge } from '../config/workflowConfig';
-import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
@@ -54,6 +56,7 @@ export default function JobDetail() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState('ALL');
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
 
   // Modals state
   const [modalState, setModalState] = useState({
@@ -64,13 +67,26 @@ export default function JobDetail() {
     releaseOpen: false,
     universalOpen: false
   });
-
-  const chartRef = useRef(null);
+  const [simpleHandoverOpen, setSimpleHandoverOpen] = useState(false);
 
   const isKeval = user?.username?.toLowerCase() === 'keval v shah';
   const isAdmin = user?.role === 'admin' || user?.role === 'executive' || isKeval;
-  const hasMarketingAccess = isAdmin || user?.departments?.includes('marketing');
-  const hasOtherAccess = isAdmin || (user?.departments && user.departments.some(d => d !== 'marketing'));
+  const isMktUser = isMarketingUser(user);
+
+  // Default to UserJobDetail for department users; admin can toggle
+  const [viewMode, setViewMode] = useState(!isAdmin ? 'user' : 'admin');
+
+  if (viewMode === 'user') {
+    return (
+      <UserJobDetail
+        onSwitchToAdmin={isAdmin ? () => setViewMode('admin') : null}
+      />
+    );
+  }
+
+  const isStrictMarketingUser = isMarketingUser(user) && !isAdmin;
+  const hasMarketingAccess = isAdmin || user?.departments?.includes('marketing') || isStrictMarketingUser;
+  const hasOtherAccess = !isStrictMarketingUser && (isAdmin || (user?.departments && user.departments.some(d => d !== 'marketing')));
 
   useEffect(() => {
     fetchJob();
@@ -235,36 +251,6 @@ export default function JobDetail() {
     }
   };
 
-  const handleDownloadChart = async () => {
-    if (!chartRef.current) return;
-    try {
-      const url = await toPng(chartRef.current, { pixelRatio: 2, style: { background: 'white' } });
-      const link = document.createElement('a');
-      link.download = `Job_${job?.jobNo || 'Status'}_Chart.png`;
-      link.href = url;
-      link.click();
-    } catch (err) {
-      alert('Failed to download chart image');
-    }
-  };
-
-  const handleDownloadChartPDF = async () => {
-    if (!chartRef.current) return;
-    try {
-      const node = chartRef.current;
-      const imgData = await toPng(node, { pixelRatio: 2, style: { background: 'white' } });
-      const pdf = new jsPDF({
-        orientation: node.offsetWidth > node.offsetHeight ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [node.offsetWidth, node.offsetHeight]
-      });
-      pdf.addImage(imgData, 'PNG', 0, 0, node.offsetWidth, node.offsetHeight);
-      pdf.save(`Job_${job?.jobNo || 'Status'}_Chart.pdf`);
-    } catch (err) {
-      alert('Failed to download chart PDF');
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-2 text-xs text-slate-500">
@@ -316,7 +302,7 @@ export default function JobDetail() {
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                #{job.jobNo || 'Draft Job'}
+                Job {cleanJobNo(job.jobNo) || 'Draft Job'}
               </h1>
               <span className="text-slate-300">•</span>
               <span className="text-base font-bold text-slate-800">
@@ -365,6 +351,16 @@ export default function JobDetail() {
 
         {/* Action Triggers */}
         <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => setViewMode('user')}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all"
+            >
+              <Eye size={13} />
+              <span>Switch to My Job View</span>
+            </button>
+          )}
+
           {!job.planningOwnerName ? (
             <button
               onClick={() => setModalState(prev => ({ ...prev, assignOpen: true }))}
@@ -570,29 +566,6 @@ export default function JobDetail() {
               </div>
               <div className="p-4">
                 <ExcelTable jobs={[job]} onJobUpdated={handleJobUpdated} user={user} hideActions={true} filterDepartments={['design', 'mechanical', 'purchase', 'production', 'dispatch', 'qc']} />
-              </div>
-            </div>
-          )}
-
-          {/* Chart Section for Keval */}
-          {isKeval && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
-                  <BarChart2 size={20} className="text-indigo-600" />
-                  <span>Executive Progress Analysis</span>
-                </h2>
-                <div className="flex space-x-2">
-                  <button onClick={handleDownloadChart} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200">
-                    PNG
-                  </button>
-                  <button onClick={handleDownloadChartPDF} className="px-3 py-1.5 bg-red-50 text-red-700 font-semibold text-xs rounded-xl border border-red-200">
-                    PDF
-                  </button>
-                </div>
-              </div>
-              <div ref={chartRef}>
-                <JobChart data={buildJobProgressData(job)} />
               </div>
             </div>
           )}
@@ -909,19 +882,31 @@ export default function JobDetail() {
                   <div className="flex items-center gap-2.5 truncate">
                     <FileCheck size={18} className="text-indigo-600 shrink-0" />
                     <div className="truncate">
-                      <span className="font-bold text-xs text-slate-800 block truncate">{file.name || `Attachment #${i+1}`}</span>
+                      <span className="font-bold text-xs text-slate-800 block truncate">{file.name || file.originalName || file.storedName || `Attachment #${i+1}`}</span>
                       <span className="text-[10px] text-slate-400 block">{file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString() : 'Uploaded'}</span>
                     </div>
                   </div>
                   {file.url && (
-                    <a
-                      href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 bg-white rounded-lg border border-slate-200 text-indigo-600 hover:bg-indigo-50 shrink-0"
-                    >
-                      <Download size={14} />
-                    </a>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewFile(file)}
+                        className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                        title="View document in modal"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <a
+                        href={file.url}
+                        download={file.name || file.originalName || file.storedName}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 bg-white rounded-lg border border-slate-200 text-indigo-600 hover:bg-indigo-50 shrink-0"
+                        title="Download file"
+                      >
+                        <Download size={14} />
+                      </a>
+                    </div>
                   )}
                 </div>
               ))}
@@ -973,6 +958,27 @@ export default function JobDetail() {
           isOpen={modalState.releaseOpen}
           onClose={() => setModalState(prev => ({ ...prev, releaseOpen: false }))}
           onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {simpleHandoverOpen && job && (
+        <SimpleHandoverModal
+          job={job}
+          isOpen={simpleHandoverOpen}
+          onClose={() => setSimpleHandoverOpen(false)}
+          onSuccess={(updated) => {
+            setJob(prev => ({ ...prev, ...updated }));
+            fetchJob();
+            fetchTimeline();
+          }}
+        />
+      )}
+
+      {/* In-Modal Document/Excel/PDF Preview Overlay */}
+      {previewFile && (
+        <DocumentPreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
         />
       )}
     </div>

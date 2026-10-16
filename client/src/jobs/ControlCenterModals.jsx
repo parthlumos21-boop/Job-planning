@@ -91,6 +91,8 @@ export function AssignOwnerModal({ job, isOpen, onClose, onSuccess }) {
           const rawUsers = Array.isArray(uRes.data) ? uRes.data : [];
           list = rawUsers.map(u => ({
             id: u.id,
+            uniqueKey: u.uniqueKey || `user_${u.id}_${u.name || u.username}`,
+            userType: u.userType || 'user',
             name: u.name || u.username,
             username: u.username || u.name,
             departments: u.departments || [],
@@ -102,7 +104,16 @@ export function AssignOwnerModal({ job, isOpen, onClose, onSuccess }) {
         }
       }
 
-      setCandidates(list);
+      // Deduplicate by uniqueKey or id+name
+      const seen = new Set();
+      const deduped = (list || []).filter(c => {
+        const k = c.uniqueKey || `${c.id}-${c.name || c.username}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+
+      setCandidates(deduped);
       if (list.length > 0 && !selectedOwnerId) {
         const first = list[0];
         const optKey = first.uniqueKey || `${first.userType || 'u'}_${first.id}_${first.name}`;
@@ -398,6 +409,8 @@ export function ReassignOwnerModal({ job, isOpen, onClose, onSuccess }) {
           const rawUsers = Array.isArray(uRes.data) ? uRes.data : [];
           list = rawUsers.map(u => ({
             id: u.id,
+            uniqueKey: u.uniqueKey || `user_${u.id}_${u.name || u.username}`,
+            userType: u.userType || 'user',
             name: u.name || u.username,
             username: u.username || u.name,
             departments: u.departments || [],
@@ -409,8 +422,17 @@ export function ReassignOwnerModal({ job, isOpen, onClose, onSuccess }) {
         }
       }
 
+      // Deduplicate by uniqueKey or id+name
+      const seen = new Set();
+      const deduped = (list || []).filter(c => {
+        const k = c.uniqueKey || `${c.id}-${c.name || c.username}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+
       // Keep all candidates available in dropdown
-      setCandidates(list);
+      setCandidates(deduped);
       if (list.length > 0) {
         const first = list.find(c => {
           const isSameId = job?.planningOwnerId && String(c.id) === String(job?.planningOwnerId);

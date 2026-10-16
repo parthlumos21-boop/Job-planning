@@ -36,6 +36,34 @@ async def find_job_by_id(db: AsyncSession, id: int) -> Any:
         job = res2.scalar_one_or_none()
     return job
 
+async def _resolve_valid_user_id(db: AsyncSession, user_id: Any, user_name: Any = None) -> Any:
+    """
+    Safely resolves a valid User.id that satisfies the PostgreSQL foreign key constraint referencing users(id).
+    If user_id is an account (>= 10000) or not present in the users table, it attempts to look up the User by name.
+    If still not present in the users table (e.g. system accounts like 'admin' or 'mktadmin'), returns None so the
+    foreign key constraint is satisfied without failing.
+    """
+    if user_id is not None and str(user_id).strip() != "":
+        try:
+            val = int(user_id)
+            if val < 10000:
+                stmt = select(User.id).where(User.id == val)
+                res = await db.execute(stmt)
+                if res.scalar_one_or_none():
+                    return val
+        except (ValueError, TypeError):
+            pass
+
+    if user_name and str(user_name).strip():
+        name_str = str(user_name).strip().lower()
+        stmt = select(User.id).where(func.lower(User.name) == name_str)
+        res = await db.execute(stmt)
+        matched_id = res.scalar_one_or_none()
+        if matched_id:
+            return matched_id
+
+    return None
+
 # 1. POST /api/jobs/{id}/handover/submit
 @router.post("/{id}/handover/submit")
 async def submit_job_handover(
@@ -55,25 +83,47 @@ async def submit_job_handover(
     notes = body.get("notes") or body.get("handoverNotes") or ""
     to_worker_id = body.get("to_worker_id") or body.get("toWorkerId")
 
+    # Enforce mandatory marketing tasks gate
+    from app.models import MarketingTask
+    mkt_stmt = select(MarketingTask).where(
+        or_(MarketingTask.job_id == job.id, MarketingTask.job_id == job.external_id),
+        MarketingTask.is_mandatory_for_readiness == True
+    )
+    mkt_res = await db.execute(mkt_stmt)
+    mandatory_tasks = mkt_res.scalars().all()
+    uncompleted = [t for t in mandatory_tasks if (t.status or "").lower() != "completed"]
+    if uncompleted:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot submit job for planning. {len(uncompleted)} mandatory marketing task(s) ('{uncompleted[0].title}') are incomplete."
+        )
+
     previous_status = job.handover_status or "Draft"
     new_status = f"Submitted for {target_dept.capitalize()}" if target_dept.lower() == "planning" else f"Submitted to {target_dept.capitalize()}"
     if target_dept.lower() == "planning":
         new_status = "Submitted for Planning"
 
+    checklist_data = dict(checklist)
+    checklist_data["submitted_by"] = user.name or user.username
+    from datetime import datetime, timezone
+    checklist_data["submitted_at"] = datetime.now(timezone.utc).isoformat()
+    checklist_data["target_department"] = target_dept.lower()
+
     job.handover_status = new_status
     job.target_department = target_dept.lower()
     job.handover_submitted_at = func.now()
-    job.handover_checklist = checklist
+    job.handover_checklist = checklist_data
     flag_modified(job, "handover_checklist")
     job.handover_notes = notes
 
+    valid_to_worker_id = await _resolve_valid_user_id(db, to_worker_id)
     # Create immutable handover history record
     handover_record = JobHandover(
         job_id=job.id,
         handover_type="PLANNING" if target_dept.lower() == "planning" else "DEPARTMENT",
         from_department=from_dept,
         to_department=target_dept.lower(),
-        to_worker_id=to_worker_id,
+        to_worker_id=valid_to_worker_id,
         reason=f"Handover from {from_dept.capitalize()} to {target_dept.capitalize()}",
         notes=notes,
         work_completed_summary=f"Handover submitted by {user.name or user.username} with checklist verified.",
@@ -139,10 +189,10 @@ async def accept_job_handover(
     job.handover_status = new_status
     job.handover_accepted_at = func.now()
 
-    if planning_owner_id:
-        job.planning_owner_id = planning_owner_id
+    valid_owner_id = await _resolve_valid_user_id(db, planning_owner_id, planning_owner_name)
+    job.planning_owner_id = valid_owner_id
     if planning_owner_name:
-        job.planning_owner_name = planning_owner_name
+        job.planning_owner_name = str(planning_owner_name).strip()
 
     # Create immutable handover history record
     handover_record = JobHandover(
@@ -150,7 +200,7 @@ async def accept_job_handover(
         handover_type="PLANNING",
         from_department="planning",
         to_department="planning",
-        to_worker_id=planning_owner_id,
+        to_worker_id=valid_owner_id,
         reason="Handover Accepted by Planning",
         notes=notes or f"Accepted by {user.name or user.username}. Planning Owner: {job.planning_owner_name or 'Unassigned'}",
         work_completed_summary=f"Handover accepted. Planning owner assigned: {job.planning_owner_name or 'None'}",
@@ -543,7 +593,7 @@ def resolve_job_stage(j: Job) -> str:
         return "RELEASED"
     return "INCOMING"
 
-def compute_planning_readiness(j: Job) -> dict:
+def compute_planning_readiness(j: Job, mkt_tasks: list = None) -> dict:
     checklist = getattr(j, "handover_checklist", {}) or {}
     fields = getattr(j, "fields", {}) or {}
     attachments = getattr(j, "attachments", None) or []
@@ -556,12 +606,26 @@ def compute_planning_readiness(j: Job) -> dict:
         {"key": "design_input", "label": "Design & Drawings Input", "ready": bool(fields.get("design") or fields.get("mechanical") or checklist.get("designVerified")), "mandatory": True},
         {"key": "documents_attached", "label": "Required Documents Attached", "ready": bool(bool(attachments) or checklist.get("docsVerified")), "mandatory": False}
     ]
+
+    if mkt_tasks:
+        for t in mkt_tasks:
+            if getattr(t, "is_mandatory_for_readiness", False):
+                is_comp = (getattr(t, "status", "") or "").lower() == "completed"
+                reqs.append({
+                    "key": f"mkt_task_{t.id}",
+                    "label": f"Mandatory Task: {t.title}",
+                    "ready": is_comp,
+                    "mandatory": True,
+                    "taskId": t.id
+                })
+
+    all_mandatory_ready = all(r["ready"] for r in reqs if r.get("mandatory", True))
     ready_count = sum(1 for r in reqs if r["ready"])
     return {
         "score": f"{ready_count}/{len(reqs)}",
         "readyCount": ready_count,
         "totalCount": len(reqs),
-        "isFullyReady": ready_count >= 5,
+        "isFullyReady": all_mandatory_ready and (ready_count >= 5),
         "requirements": reqs
     }
 
@@ -870,8 +934,9 @@ async def assign_planning_owner(
 
     now = datetime.now(timezone.utc)
     previous_owner = job.planning_owner_name or "Unassigned"
-    job.planning_owner_id = planning_owner_id
-    job.planning_owner_name = planning_owner_name
+    valid_owner_id = await _resolve_valid_user_id(db, planning_owner_id, planning_owner_name)
+    job.planning_owner_id = valid_owner_id
+    job.planning_owner_name = str(planning_owner_name).strip()
     job.priority = priority
     job.assignment_reason_category = reason_category
     job.assignment_explanation = reason_explanation
@@ -893,7 +958,7 @@ async def assign_planning_owner(
         handover_type="PLANNING",
         from_department="planning",
         to_department="planning",
-        to_worker_id=planning_owner_id,
+        to_worker_id=valid_owner_id,
         reason=f"Planning Owner Assigned: {planning_owner_name}",
         notes=full_reason,
         work_completed_summary=f"Assigned by {user.name or user.username}. Reason: {full_reason}",
@@ -1012,8 +1077,9 @@ async def reassign_planning_owner(
 
     now = datetime.now(timezone.utc)
     previous_owner = job.planning_owner_name or "Unassigned"
-    job.planning_owner_id = new_owner_id
-    job.planning_owner_name = new_owner_name
+    valid_owner_id = await _resolve_valid_user_id(db, new_owner_id, new_owner_name)
+    job.planning_owner_id = valid_owner_id
+    job.planning_owner_name = str(new_owner_name).strip()
     job.assignment_reason_category = reason_category or "Reassignment"
     job.assignment_explanation = reassignment_reason
     job.current_action = f"Planning reassigned to {new_owner_name}. Continue planning review."
@@ -1028,7 +1094,7 @@ async def reassign_planning_owner(
         handover_type="PLANNING",
         from_department="planning",
         to_department="planning",
-        to_worker_id=new_owner_id,
+        to_worker_id=valid_owner_id,
         reason=f"Planning Owner Reassigned: {previous_owner} → {new_owner_name}",
         notes=note_text,
         work_completed_summary=f"Reassigned by {user.name or user.username}. Reason: {reassignment_reason}",
@@ -1728,7 +1794,7 @@ async def get_planning_users_workload(
             continue
         seen_names.add(a_name.lower())
         combined_candidates.append({
-            "id": a.id,
+            "id": 10000 + a.id,
             "userType": "account",
             "uniqueKey": f"account_{a.id}",
             "name": a_name,
