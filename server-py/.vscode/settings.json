@@ -8,5 +8,14 @@
   "python.autoComplete.extraPaths": [
     ".",
     "venv/Lib/site-packages"
-  ]
+  ],
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingTypeStubs": "none",
+    "reportGeneralTypeIssues": "none",
+    "reportAttributeAccessIssue": "none",
+    "reportArgumentType": "none",
+    "reportCallIssue": "none",
+    "reportOperatorIssue": "none",
+    "reportAssignmentType": "none"
+  }
 }

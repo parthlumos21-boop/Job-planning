@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search, X, RefreshCw, Briefcase, Clock, AlertTriangle, CheckCircle2,
-  ArrowRightLeft, ChevronLeft, ChevronRight, Filter, Building2, UserCheck
+  Search, X, RefreshCw, Clock, AlertTriangle, CheckCircle2,
+  ArrowRightLeft, ChevronLeft, ChevronRight, Filter, Building2, Eye
 } from 'lucide-react';
 import { cleanJobNo } from '../config/marketingFormConfig';
 
@@ -17,6 +17,40 @@ const DEPARTMENT_OPTIONS = [
   { value: 'production', label: 'Production & QC & Dispatch' }
 ];
 
+export const computeNextAction = (job) => {
+  const isCompleted =
+    (job.lifecycleStatus || '').toLowerCase() === 'completed' ||
+    job.actualEndAt !== null ||
+    (job.departmentStatus || {}).dispatch === 'completed';
+  if (isCompleted) {
+    return { label: 'View', badge: 'bg-slate-100 text-slate-600 border-slate-200' };
+  }
+
+  const hStatus = (job.handoverStatus || '').toLowerCase();
+  const isReturned = hStatus.includes('returned') || Boolean(job.handoverReturnReason);
+  if (isReturned) {
+    return { label: 'Resolve Clarification', badge: 'bg-rose-50 text-rose-700 border-rose-200' };
+  }
+
+  const isHandedOver = hStatus.includes('submitted') || hStatus.includes('pending');
+  if (isHandedOver) {
+    return { label: 'In Review', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+  }
+
+  if (job.dataGivenToDesign === 'No' || !job.dataGivenToDesign) {
+    const visDepts = (job.visibleToDepartments || []).map(d => String(d).toLowerCase());
+    if (visDepts.includes('marketing')) {
+      return { label: 'Complete Readiness Check', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+    }
+  }
+
+  if (job.hasOpenTask) {
+    return { label: 'Complete My Task', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+  }
+
+  return { label: 'Handover to Next Department', badge: 'bg-teal-50 text-teal-700 border-teal-200' };
+};
+
 export default function SearchJobsSection({
   jobs = [],
   loading = false,
@@ -25,158 +59,71 @@ export default function SearchJobsSection({
   selectedDept = 'all',
   onDeptChange,
   userDeptName = '',
-  onHandoverClick
+  searchQuery = '',
+  onSearchChange
 }) {
   const navigate = useNavigate();
 
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'in_progress', 'ready_for_handover', 'overdue', 'completed'
+  const [inputVal, setInputVal] = useState(searchQuery || '');
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Reset to page 1 whenever search, statusFilter, or selectedDept changes
+  // Debounced search sync to parent
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (onSearchChange) {
+        onSearchChange(inputVal);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputVal, onSearchChange]);
+
+  // Keep local input in sync if parent resets search
+  useEffect(() => {
+    setInputVal(searchQuery || '');
+  }, [searchQuery]);
+
+  // Reset to page 1 whenever input or dept changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, statusFilter, selectedDept]);
-
-  // 100% Case-Insensitive 5-Field Search and Status Filtering
-  const filteredJobs = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return jobs.filter((job) => {
-      // 5-Field Search
-      if (search && search.trim()) {
-        const q = search.trim().toLowerCase();
-        const rawJobNo = (job.jobNo || '').trim().toLowerCase();
-        const cleanNo = cleanJobNo(job.jobNo).toLowerCase();
-        const matchesJobNo = cleanNo.includes(q) || rawJobNo.includes(q);
-        const matchesProject = (job.projectName || '').toLowerCase().includes(q);
-        const matchesClient = (job.clientName || '').toLowerCase().includes(q);
-        const matchesPanel = (job.panelName || '').toLowerCase().includes(q);
-        const matchesEngg = (job.responsibleEnggName || '').toLowerCase().includes(q);
-
-        if (!matchesJobNo && !matchesProject && !matchesClient && !matchesPanel && !matchesEngg) {
-          return false;
-        }
-      }
-
-      const isCompleted =
-        (job.lifecycleStatus || '').toLowerCase() === 'completed' ||
-        job.actualEndAt !== null ||
-        (job.departmentStatus || {}).dispatch === 'completed';
-
-      const hStatus = (job.handoverStatus || '').toLowerCase();
-      const isHandedOver = hStatus.includes('submitted') || hStatus.includes('pending');
-      const isReadyForHandover = (Boolean(job.dataGivenToDesign) || isHandedOver) && !isCompleted;
-
-      const expDate = job.stageDueDate || job.plannedEndAt || job.deliveryDate;
-      let isOverdue = false;
-      if (!isCompleted && expDate) {
-        const d = new Date(expDate);
-        if (!isNaN(d.getTime()) && d < today) {
-          isOverdue = true;
-        }
-      }
-
-      // Status filters
-      if (statusFilter === 'in_progress') {
-        if (isCompleted) return false;
-      } else if (statusFilter === 'ready_for_handover') {
-        if (!isReadyForHandover) return false;
-      } else if (statusFilter === 'overdue') {
-        if (!isOverdue) return false;
-      } else if (statusFilter === 'completed') {
-        if (!isCompleted) return false;
-      }
-
-      return true;
-    });
-  }, [jobs, search, statusFilter]);
-
-  // Dynamic counts for status filter chips
-  const statusCounts = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const counts = {
-      all: jobs.length,
-      in_progress: 0,
-      ready_for_handover: 0,
-      overdue: 0,
-      completed: 0
-    };
-
-    jobs.forEach((job) => {
-      const isCompleted =
-        (job.lifecycleStatus || '').toLowerCase() === 'completed' ||
-        job.actualEndAt !== null ||
-        (job.departmentStatus || {}).dispatch === 'completed';
-
-      const hStatus = (job.handoverStatus || '').toLowerCase();
-      const isHandedOver = hStatus.includes('submitted') || hStatus.includes('pending');
-      const isReadyForHandover = (Boolean(job.dataGivenToDesign) || isHandedOver) && !isCompleted;
-
-      const expDate = job.stageDueDate || job.plannedEndAt || job.deliveryDate;
-      let isOverdue = false;
-      if (!isCompleted && expDate) {
-        const d = new Date(expDate);
-        if (!isNaN(d.getTime()) && d < today) {
-          isOverdue = true;
-        }
-      }
-
-      if (isCompleted) counts.completed++;
-      else counts.in_progress++;
-
-      if (isReadyForHandover) counts.ready_for_handover++;
-      if (isOverdue) counts.overdue++;
-    });
-
-    return counts;
-  }, [jobs]);
+  }, [inputVal, selectedDept]);
 
   // Pagination (Strictly 10 records per page)
-  const totalPages = Math.max(1, Math.ceil(filteredJobs.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(jobs.length / ITEMS_PER_PAGE));
   const paginatedJobs = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredJobs.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredJobs, currentPage]);
+    return jobs.slice(start, start + ITEMS_PER_PAGE);
+  }, [jobs, currentPage]);
+
+  const handleClear = () => {
+    setInputVal('');
+    if (onSearchChange) {
+      onSearchChange('');
+    }
+  };
 
   return (
-    <div className="bg-white rounded-2xl border border-blue-100 shadow-sm overflow-hidden space-y-4 p-5">
-      {/* Top Header & Search Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 md:p-6 space-y-4">
+      
+      {/* 1. TOP HEADER & SEARCH BAR */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span className="w-2.5 h-6 rounded-full bg-blue-600 inline-block"></span>
-              Search Jobs
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+              Global Job Search
             </h2>
-            {onRefresh && (
-              <button
-                onClick={onRefresh}
-                disabled={loading}
-                className={`p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all ${
-                  loading ? 'animate-spin' : ''
-                }`}
-                title="Refresh Records"
-              >
-                <RefreshCw size={15} />
-              </button>
-            )}
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+              {jobs.length} Total Jobs
+            </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
-            {isAdmin
-              ? 'Universal job register & workflow monitoring across all plant departments'
-              : `${userDeptName || 'Department'} live authorized project records & stage monitoring`}
+          <p className="text-xs text-slate-500 mt-0.5">
+            Search across Job Number, Project, Customer, Panel, or Engineer
           </p>
         </div>
 
-        {/* Right side controls: Admin Department Dropdown & Search Input */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          {/* Admin Department Dropdown Filter */}
+        {/* Search Input & Optional Department Filter */}
+        <div className="flex flex-wrap items-center gap-3">
           {isAdmin ? (
-            <div className="flex items-center gap-2 bg-blue-50/80 px-3 py-1.5 rounded-xl border border-blue-100">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/70 border border-blue-200/60 rounded-xl text-xs font-medium text-blue-900 shrink-0">
               <Filter size={14} className="text-blue-600 shrink-0" />
               <label className="text-xs font-bold text-blue-900 uppercase tracking-wider whitespace-nowrap">
                 Dept:
@@ -202,91 +149,70 @@ export default function SearchJobsSection({
             )
           )}
 
-          {/* 5-Field Search Box */}
-          <div className="relative min-w-[260px] sm:w-80">
+          {/* Single Global Search Input */}
+          <div className="relative min-w-[280px] sm:w-96">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by Job No, Project, Customer, Panel, Engineer..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by Job Number, Project, Customer, Panel, Engineer..."
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
               className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
             />
-            {search && (
+            {inputVal && (
               <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                onClick={handleClear}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                 title="Clear Search"
               >
                 <X size={14} />
               </button>
             )}
           </div>
+
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer"
+            title="Refresh jobs"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin text-blue-600' : ''} />
+          </button>
         </div>
       </div>
 
-      {/* Status Filter Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
-        {[
-          { id: 'all', label: 'All Jobs', count: statusCounts.all },
-          { id: 'in_progress', label: 'In Progress', count: statusCounts.in_progress },
-          { id: 'ready_for_handover', label: 'Ready for Next Stage', count: statusCounts.ready_for_handover },
-          { id: 'overdue', label: 'Overdue', count: statusCounts.overdue },
-          { id: 'completed', label: 'Completed', count: statusCounts.completed }
-        ].map((chip) => (
-          <button
-            key={chip.id}
-            onClick={() => setStatusFilter(chip.id)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-              statusFilter === chip.id
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-            }`}
-          >
-            <span>{chip.label}</span>
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                statusFilter === chip.id
-                  ? 'bg-white/20 text-white'
-                  : 'bg-white text-slate-700 border border-slate-200'
-              }`}
-            >
-              {chip.count}
-            </span>
-          </button>
-        ))}
-
-        {search && (
-          <span className="text-xs text-slate-500 ml-auto whitespace-nowrap font-medium">
-            Found <strong className="text-blue-600">{filteredJobs.length}</strong> matching records
+      {inputVal && (
+        <div className="flex items-center justify-between pb-1">
+          <span className="text-xs text-slate-500 font-medium">
+            Showing results matching: <strong className="text-blue-600 font-bold">"{inputVal}"</strong>
           </span>
-        )}
-      </div>
+          <span className="text-xs text-slate-400">
+            Found <strong>{jobs.length}</strong> matching records
+          </span>
+        </div>
+      )}
 
-      {/* Results Table (Exact 9 Columns from Visual Reference) */}
+      {/* 2. STRICTLY READ-ONLY RESULTS TABLE (EXACT 9 COLUMNS) */}
       <div className="border border-slate-200 rounded-xl overflow-hidden">
         {loading ? (
           <div className="py-20 text-center text-slate-400 text-sm">
             <RefreshCw size={26} className="animate-spin mx-auto mb-2 text-blue-600" />
-            Loading live job records...
+            Loading job records...
           </div>
-        ) : filteredJobs.length === 0 ? (
+        ) : jobs.length === 0 ? (
           <div className="py-16 px-4 text-center">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3">
               <Search size={22} />
             </div>
-            <p className="text-sm font-bold text-slate-800">No matching jobs found</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              {search
-                ? `No jobs match "${search}" with the active status filter.`
-                : 'No jobs are currently registered in this filter category.'}
+            <p className="text-sm font-bold text-slate-800">
+              No jobs found. Try searching by Job Number, Project Name, Customer, Panel Name or Engineer.
             </p>
-            {(search || statusFilter !== 'all') && (
+            {inputVal && (
               <button
-                onClick={() => { setSearch(''); setStatusFilter('all'); }}
-                className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl text-xs font-bold transition-all"
+                onClick={handleClear}
+                className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
-                Clear Search & Filters
+                Clear Search
               </button>
             )}
           </div>
@@ -300,7 +226,7 @@ export default function SearchJobsSection({
                   <th className="py-3 px-3.5 whitespace-nowrap">Customer</th>
                   <th className="py-3 px-3.5 whitespace-nowrap">Panel Name</th>
                   <th className="py-3 px-3.5 whitespace-nowrap">Engineer</th>
-                  <th className="py-3 px-3 whitespace-nowrap">Expected Date</th>
+                  <th className="py-3 px-3.5 whitespace-nowrap">Expected Date</th>
                   <th className="py-3 px-3.5 whitespace-nowrap">Status</th>
                   <th className="py-3 px-3.5 whitespace-nowrap">Next Action</th>
                   <th className="py-3 px-3.5 text-right whitespace-nowrap">View</th>
@@ -326,17 +252,17 @@ export default function SearchJobsSection({
                     if (!isNaN(d.getTime()) && d < today) isOverdue = true;
                   }
 
+                  const nextAction = computeNextAction(job);
+
                   return (
-                    <tr key={job.id} className="hover:bg-blue-50/40 transition-colors">
-                      {/* 1. Job Number (Clean without #) */}
-                      <td className="py-3 px-3.5 whitespace-nowrap">
-                        <button
-                          onClick={() => navigate(`/jobs/${job.id}`)}
-                          className="font-black text-blue-700 hover:text-blue-900 hover:underline text-xs flex items-center gap-1"
-                          title="Open Job Details"
-                        >
-                          {cleanJobNo(job.jobNo)}
-                        </button>
+                    <tr
+                      key={job.id}
+                      onClick={() => navigate(`/jobs/${job.id}`)}
+                      className="hover:bg-blue-50/40 transition-colors cursor-pointer"
+                    >
+                      {/* 1. Job Number (Clean database number) */}
+                      <td className="py-3 px-3.5 whitespace-nowrap font-black text-blue-700 hover:text-blue-900 text-xs">
+                        {cleanJobNo(job.jobNo)}
                       </td>
 
                       {/* 2. Project Name */}
@@ -367,8 +293,8 @@ export default function SearchJobsSection({
                       </td>
 
                       {/* 6. Expected Date */}
-                      <td className="py-3 px-3 text-slate-900 font-bold whitespace-nowrap">
-                        {job.deliveryDate || (job.stageDueDate ? job.stageDueDate.slice(0, 10) : '—')}
+                      <td className="py-3 px-3.5 text-slate-900 font-bold whitespace-nowrap">
+                        {job.deliveryDate || (job.stageDueDate ? job.stageDueDate.slice(0, 10) : '') || job.plannedEndAt || '—'}
                       </td>
 
                       {/* 7. Status */}
@@ -396,36 +322,25 @@ export default function SearchJobsSection({
                         )}
                       </td>
 
-                      {/* 8. Next Action */}
+                      {/* 8. Next Action (Clean dynamic badge) */}
                       <td className="py-3 px-3.5 whitespace-nowrap">
-                        {!isCompleted && onHandoverClick && !isHandedOver ? (
-                          <button
-                            onClick={() => onHandoverClick(job)}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold transition-all text-xs flex items-center gap-1"
-                            title="Handover Job to Next Department"
-                          >
-                            <ArrowRightLeft size={11} />
-                            Handover →
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => navigate(`/jobs/edit/${job.id}`)}
-                            className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold transition-all text-xs"
-                            title="Update Job Data"
-                          >
-                            Update
-                          </button>
-                        )}
+                        <span className={`px-2.5 py-1 rounded-lg border font-bold text-xs inline-flex items-center gap-1 ${nextAction.badge}`}>
+                          {nextAction.label}
+                        </span>
                       </td>
 
-                      {/* 9. View */}
+                      {/* 9. View Button */}
                       <td className="py-3 px-3.5 text-right whitespace-nowrap">
                         <button
-                          onClick={() => navigate(`/jobs/${job.id}`)}
-                          className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all text-xs shadow-2xs hover:shadow-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/jobs/${job.id}`);
+                          }}
+                          className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all text-xs shadow-2xs hover:shadow-xs inline-flex items-center gap-1 cursor-pointer"
                           title="View Full Job Detail"
                         >
-                          Open
+                          <Eye size={12} />
+                          <span>View</span>
                         </button>
                       </td>
                     </tr>
@@ -437,20 +352,20 @@ export default function SearchJobsSection({
         )}
       </div>
 
-      {/* Strict 10-Record Pagination Controls */}
-      {filteredJobs.length > 0 && (
+      {/* 3. STRICT 10-RECORD PAGINATION CONTROLS */}
+      {jobs.length > 0 && (
         <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="text-slate-500 font-medium">
             Showing <span className="font-bold text-slate-800">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> to{' '}
-            <span className="font-bold text-slate-800">{Math.min(currentPage * ITEMS_PER_PAGE, filteredJobs.length)}</span> of{' '}
-            <span className="font-bold text-slate-800">{filteredJobs.length}</span> entries (Page {currentPage} of {totalPages})
+            <span className="font-bold text-slate-800">{Math.min(currentPage * ITEMS_PER_PAGE, jobs.length)}</span> of{' '}
+            <span className="font-bold text-slate-800">{jobs.length}</span> entries (Page {currentPage} of {totalPages})
           </div>
 
           <div className="flex items-center gap-1 self-center sm:self-auto">
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold flex items-center gap-1 transition-all"
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold flex items-center gap-1 transition-all cursor-pointer"
             >
               <ChevronLeft size={14} />
               Previous
@@ -474,7 +389,7 @@ export default function SearchJobsSection({
                       )}
                       <button
                         onClick={() => setCurrentPage(p)}
-                        className={`w-7 h-7 rounded-lg font-black transition-all ${
+                        className={`w-7 h-7 rounded-lg font-black transition-all cursor-pointer ${
                           currentPage === p
                             ? 'bg-blue-600 text-white shadow-xs'
                             : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -490,7 +405,7 @@ export default function SearchJobsSection({
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold flex items-center gap-1 transition-all"
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold flex items-center gap-1 transition-all cursor-pointer"
             >
               Next
               <ChevronRight size={14} />

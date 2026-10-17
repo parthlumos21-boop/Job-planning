@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { DEPARTMENT_USER_OPTIONS } from './departmentUserOptions';
 import { cleanJobNo } from '../config/marketingFormConfig';
 import {
-  X, Send, CheckCircle2, AlertCircle, Loader2, ArrowRightLeft, ShieldCheck, UserCheck
+  X, Send, CheckCircle2, AlertCircle, Loader2, ArrowRightLeft
 } from 'lucide-react';
 
 export default function SimpleHandoverModal({
@@ -18,54 +18,45 @@ export default function SimpleHandoverModal({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const [selectedEngineer, setSelectedEngineer] = useState('');
-  const [notes, setNotes] = useState('');
-  const [verified, setVerified] = useState(true);
+  const [targetDepartment, setTargetDepartment] = useState('design');
+  const [selectedEngineer, setSelectedEngineer] = useState(job?.responsibleEnggName || job?.responsible_engg_name || '');
+  const [notes, setNotes] = useState('Technical package ready for design.');
 
-  if (!isOpen || !job) return null;
+  const normalizeDept = (d) => {
+    const s = (d || '').toLowerCase();
+    if (s.includes('market')) return 'marketing';
+    if (s.includes('mech')) return 'mechanical';
+    if (s.includes('elect') || s.includes('design')) return 'design';
+    if (s.includes('purch') || s.includes('proc')) return 'purchase';
+    if (s.includes('prod') || s.includes('qc') || s.includes('disp')) return 'production';
+    return s || 'design';
+  };
 
-  const designEngineers = Array.from(new Set([
-    ...(DEPARTMENT_USER_OPTIONS.design || []),
-    ...(DEPARTMENT_USER_OPTIONS['design-electrical'] || []),
-    ...(DEPARTMENT_USER_OPTIONS['design-mechanical'] || [])
+  const targetDeptKey = normalizeDept(targetDepartment);
+  const targetEngineers = Array.from(new Set([
+    ...(DEPARTMENT_USER_OPTIONS[targetDeptKey] || []),
+    'Keval V Shah'
   ]));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!verified) {
-      setError('Please verify technical data completeness before handing over.');
-      return;
-    }
-
     try {
       setLoading(true);
       setError('');
       setSuccess('');
 
-      const res = await api.post(`/jobs/${job.id}/handover/submit`, {
-        targetDepartment: 'design',
-        fromDepartment: 'marketing',
-        toWorkerId: selectedEngineer ? Number(selectedEngineer) : null,
-        notes: notes.trim(),
-        checklist: {
-          marketingDataVerified: true,
-          submittedBy: user?.name || user?.username || 'Marketing',
-          submittedAt: new Date().toISOString()
-        }
+      const jobId = job.id || job.externalId || job.external_id;
+      const res = await api.post(`/jobs/${jobId}/workflow/handover`, {
+        targetDepartment: targetDepartment,
+        responsibleEngineer: selectedEngineer,
+        handoverNote: notes.trim(),
+        notes: notes.trim()
       });
 
-      const submitterName = user?.name || user?.username || 'Marketing Team';
-      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setSuccess(`Job ${cleanJobNo(job.jobNo)} handed over to Design by ${submitterName} at ${nowStr}!`);
+      setSuccess(`Job ${cleanJobNo(job.jobNo || job.job_no)} handed over to Electrical Design successfully!`);
 
       if (onSuccess) {
-        onSuccess(res.data?.job || {
-          ...job,
-          handoverStatus: 'Submitted to Design',
-          targetDepartment: 'design',
-          handoverSubmittedAt: new Date().toISOString(),
-          handoverSubmittedBy: submitterName
-        });
+        onSuccess(res.data);
       }
 
       setTimeout(() => {
@@ -80,25 +71,28 @@ export default function SimpleHandoverModal({
     }
   };
 
+  const jobNoDisplay = cleanJobNo(job.jobNo || job.job_no || 'JOB');
+  const panelDisplay = job.panelName || job.panel_name || 'Standard Panel';
+  const customerDisplay = job.clientName || job.client_name || job.customer || 'Elite Electricals';
+  const currentRespEngg = job.responsibleEnggName || job.responsible_engg_name || 'Hasmukh';
+  const fromDeptDisplay = job.currentDepartment || job.current_department || 'Marketing';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs">
-              <ArrowRightLeft size={18} />
+        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-blue-600 text-white">
+              <ArrowRightLeft size={16} />
             </div>
-            <div>
-              <h3 className="text-base font-black text-slate-900 tracking-tight">Handover to Design</h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Job {cleanJobNo(job.jobNo)} • {job.clientName || 'General Client'}
-              </p>
-            </div>
+            <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">
+              HANDOVER TO DESIGN
+            </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors"
           >
             <X size={18} />
           </button>
@@ -120,73 +114,90 @@ export default function SimpleHandoverModal({
             </div>
           )}
 
-          {/* Job Summary Banner */}
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-1">
-            <div className="flex justify-between text-slate-600">
-              <span className="font-semibold">Panel:</span>
-              <span className="font-bold text-slate-900">{job.panelName || 'Standard Panel'} (Qty: {job.qty || 1})</span>
+          {/* Job Overview Section */}
+          <div className="space-y-3 pb-3 border-b border-slate-200">
+            <div>
+              <div className="text-base font-black text-slate-900 tracking-tight">{jobNoDisplay}</div>
+              <div className="text-xs font-semibold text-slate-600">{panelDisplay}</div>
             </div>
-            <div className="flex justify-between text-slate-600">
-              <span className="font-semibold">Project:</span>
-              <span className="font-medium text-slate-800">{job.projectName || '—'}</span>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Customer</div>
+              <div className="text-xs font-semibold text-slate-800 mt-0.5">{customerDisplay}</div>
             </div>
-            <div className="flex justify-between text-slate-600">
-              <span className="font-semibold">Current Submitter:</span>
-              <span className="font-bold text-indigo-700">{user?.name || user?.username || 'Marketing Team'}</span>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">From Department</div>
+                <div className="text-xs font-semibold text-slate-800 mt-0.5 capitalize">{fromDeptDisplay}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Responsible Engineer</div>
+                <div className="text-xs font-semibold text-slate-800 mt-0.5">{currentRespEngg}</div>
+              </div>
             </div>
           </div>
 
-          {/* Target Design Engineer (Optional) */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Assign to Design Engineer (Optional)
-            </label>
-            <select
-              value={selectedEngineer}
-              onChange={(e) => setSelectedEngineer(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
-            >
-              <option value="">-- Design Department Queue (All Design Leads) --</option>
-              {designEngineers.map((eng, idx) => {
-                const name = typeof eng === 'string' ? eng : eng?.name || 'Engineer';
-                return (
-                  <option key={`design-eng-${name}-${idx}`} value={name}>
-                    {name} (Design)
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          {/* Send To Section */}
+          <div className="space-y-3 pt-1">
+            <div className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Send To
+            </div>
 
-          {/* Handover Notes */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Handover Remarks / Priority Note
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Customer PO verified. Urgent drawing approval requested."
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
-            />
-          </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Department
+              </label>
+              <select
+                value={targetDepartment}
+                onChange={(e) => setTargetDepartment(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              >
+                <option value="design">Electrical Design</option>
+                <option value="mechanical">Mechanical Design</option>
+                <option value="purchase">Procurement</option>
+                <option value="production">Production & QC & Dispatch</option>
+              </select>
+            </div>
 
-          {/* Readiness Confirmation */}
-          <label className="flex items-start gap-2.5 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={verified}
-              onChange={(e) => setVerified(e.target.checked)}
-              className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-            />
-            <span className="text-xs text-indigo-950 font-medium">
-              I confirm that project specs, PO details, and drawing data have been entered and are ready for Design.
-            </span>
-          </label>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Responsible Engineer
+              </label>
+              <select
+                value={selectedEngineer}
+                onChange={(e) => setSelectedEngineer(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              >
+                <option value="">Select Engineer</option>
+                {targetEngineers.map((eng, idx) => (
+                  <option key={`eng-${idx}`} value={eng}>{eng}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Handover Note
+              </label>
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Technical package ready for design..."
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
+              />
+            </div>
+
+            {/* Readiness Badge */}
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-emerald-800 font-bold text-xs">
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              <span>Readiness: ✓ All required information complete</span>
+            </div>
+          </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
@@ -197,8 +208,8 @@ export default function SimpleHandoverModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !verified}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-bold shadow-sm hover:shadow transition-all"
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs font-bold shadow-sm hover:shadow transition-all"
             >
               {loading ? (
                 <>
@@ -208,7 +219,7 @@ export default function SimpleHandoverModal({
               ) : (
                 <>
                   <Send size={14} />
-                  <span>Confirm Handover to Design →</span>
+                  <span>Handover to Design</span>
                 </>
               )}
             </button>

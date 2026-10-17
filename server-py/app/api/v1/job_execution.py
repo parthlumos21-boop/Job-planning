@@ -1,11 +1,11 @@
-from typing import Optional
+from typing import Optional, Any, cast
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from app.db.session import get_db
 from app.api.deps import get_current_user, require_admin
-from app.models import Job, JobExecutionSession, JobProgressHistory, JobHandover, User
+from app.models import Job, JobExecutionSession, JobProgressHistory, JobHandover, User, Account
 from app.schemas import (
     UserPayload, JobScheduleRequest, JobPauseRequest,
     JobResumeRequest, JobCompleteRequest, JobHandoverRequest,
@@ -35,7 +35,7 @@ async def schedule_job(
 ):
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -50,7 +50,8 @@ async def schedule_job(
     if req.assigned_engineer_id:
         job.assigned_engineer_id = req.assigned_engineer_id
 
-    if job.lifecycle_status in ["Draft", None]:
+    current_status = str(getattr(job, "lifecycle_status", "") or "")
+    if current_status in ["Draft", "None", "", "NoneType"]:
         job.lifecycle_status = "Scheduled"
 
     await db.commit()
@@ -92,11 +93,11 @@ async def start_job(
 ):
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.lifecycle_status in ["In Progress", "Running"]:
+    if str(getattr(job, "lifecycle_status", "") or "") in ["In Progress", "Running"]:
         return {"ok": True, "message": "Job is already running", "status": "In Progress"}
 
     now = datetime.now(timezone.utc)
@@ -112,7 +113,7 @@ async def start_job(
         JobExecutionSession.ended_at.is_(None)
     )
     c_res = await db.execute(c_stmt)
-    for cs in c_res.scalars().all():
+    for cs in cast(list[Any], c_res.scalars().all()):
         cs.ended_at = now
         cs.duration_seconds = max(0, int((now - cs.started_at).total_seconds()))
 
@@ -165,14 +166,15 @@ async def pause_job(
 ):
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.lifecycle_status not in ["Running", "In Progress"]:
+    current_status = str(getattr(job, "lifecycle_status", "") or "")
+    if current_status not in ["Running", "In Progress"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot pause job in '{job.lifecycle_status}' state (must be In Progress/Running)"
+            detail=f"Cannot pause job in '{current_status}' state (must be In Progress/Running)"
         )
 
     category = (req.category or req.reason or "Material unavailable").strip()
@@ -204,7 +206,7 @@ async def pause_job(
         JobExecutionSession.ended_at.is_(None)
     ).order_by(desc(JobExecutionSession.id))
     s_res = await db.execute(s_stmt)
-    for last_session in s_res.scalars().all():
+    for last_session in cast(list[Any], s_res.scalars().all()):
         last_session.ended_at = now
         last_session.duration_seconds = max(0, int((now - last_session.started_at).total_seconds()))
 
@@ -270,31 +272,32 @@ async def resume_job(
         req = JobResumeRequest()
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.lifecycle_status in ["In Progress", "Running"]:
+    status_val = str(getattr(job, "lifecycle_status", "") or "")
+    if status_val in ["In Progress", "Running"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot resume job: job is already active and running"
         )
-    if job.lifecycle_status == "Completed":
+    if status_val == "Completed":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot resume job: job has already been completed"
         )
-    if job.lifecycle_status not in ["Paused", "On Hold"]:
+    if status_val not in ["Paused", "On Hold"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot resume job in '{job.lifecycle_status}' state"
+            detail=f"Cannot resume job in '{status_val}' state"
         )
 
     now = datetime.now(timezone.utc)
     paused_delta = 0
     if job.pause_started_at:
         paused_delta = max(0, int((now - job.pause_started_at).total_seconds()))
-        job.total_paused_seconds = (job.total_paused_seconds or 0) + paused_delta
+        job.total_paused_seconds = int(getattr(job, "total_paused_seconds", 0) or 0) + paused_delta
 
     job.lifecycle_status = "In Progress"
     job.pause_started_at = None
@@ -307,7 +310,7 @@ async def resume_job(
         JobExecutionSession.ended_at.is_(None)
     ).order_by(desc(JobExecutionSession.id))
     s_res = await db.execute(s_stmt)
-    for last_pause in s_res.scalars().all():
+    for last_pause in cast(list[Any], s_res.scalars().all()):
         last_pause.ended_at = now
         last_pause.duration_seconds = max(0, int((now - last_pause.started_at).total_seconds()))
 
@@ -365,7 +368,7 @@ async def complete_job(
         req = JobCompleteRequest()
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -374,9 +377,9 @@ async def complete_job(
         job.actual_start_at = now
 
     # If job was paused, close pause session and accumulate
-    if job.lifecycle_status == "Paused" and job.pause_started_at:
+    if str(getattr(job, "lifecycle_status", "") or "") == "Paused" and job.pause_started_at:
         paused_delta = max(0, int((now - job.pause_started_at).total_seconds()))
-        job.total_paused_seconds = (job.total_paused_seconds or 0) + paused_delta
+        job.total_paused_seconds = int(getattr(job, "total_paused_seconds", 0) or 0) + paused_delta
         job.pause_started_at = None
 
     # Close any open work sessions
@@ -385,7 +388,7 @@ async def complete_job(
         JobExecutionSession.ended_at.is_(None)
     )
     s_res = await db.execute(s_stmt)
-    for s in s_res.scalars().all():
+    for s in cast(list[Any], s_res.scalars().all()):
         s.ended_at = now
         s.duration_seconds = max(0, int((now - s.started_at).total_seconds()))
 
@@ -393,11 +396,12 @@ async def complete_job(
     job.actual_end_at = now
 
     raw_elapsed = max(0, int((now - job.actual_start_at).total_seconds()))
-    job.actual_duration_seconds = max(0, raw_elapsed - (job.total_paused_seconds or 0))
+    job.actual_duration_seconds = max(0, raw_elapsed - int(getattr(job, "total_paused_seconds", 0) or 0))
     job.progress_percentage = 100.00
 
     # Also update dispatch status in department_status
-    dep_status = dict(job.department_status or {})
+    raw_dept_status = getattr(job, "department_status", None) or {}
+    dep_status = dict(raw_dept_status) if isinstance(raw_dept_status, dict) else {}
     dep_status["dispatch"] = "completed"
     job.department_status = dep_status
 
@@ -447,7 +451,7 @@ async def get_job_sessions(
 ):
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -468,7 +472,7 @@ async def get_job_sessions(
             "pauseReason": s.pause_reason,
             "notes": s.notes
         }
-        for s in sessions
+        for s in cast(list[Any], sessions)
     ]
 
 # POST /api/jobs/{id}/handover
@@ -481,7 +485,7 @@ async def handover_job(
 ):
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -504,13 +508,13 @@ async def handover_job(
     elif target_worker_name:
         w_stmt = select(User).where(func.lower(User.name) == target_worker_name.strip().lower())
         w_res = await db.execute(w_stmt)
-        next_worker = w_res.scalar_one_or_none()
+        next_worker = w_res.scalars().first()
         if next_worker:
             target_worker_id = next_worker.id
         else:
             a_stmt = select(Account).where(func.lower(Account.username) == target_worker_name.strip().lower())
             a_res = await db.execute(a_stmt)
-            acc = a_res.scalar_one_or_none()
+            acc = a_res.scalars().first()
             if acc:
                 target_worker_id = acc.id
                 target_worker_name = acc.username
@@ -546,18 +550,19 @@ async def handover_job(
     )
     s_res = await db.execute(s_stmt)
     active_seconds_before = 0
-    for s in s_res.scalars().all():
+    for s in cast(list[Any], s_res.scalars().all()):
         s.ended_at = now
         s.duration_seconds = max(0, int((now - s.started_at).total_seconds()))
         active_seconds_before += s.duration_seconds
 
     summary_text = req.work_completed_summary or req.workCompletedSummary or f"Handover from {prev_worker_name} ({from_worker_position}) to {next_worker_name} ({target_position})"
 
-    is_paused_already = job.lifecycle_status in ["Paused", "On Hold"]
+    is_paused_already = str(getattr(job, "lifecycle_status", "") or "") in ["Paused", "On Hold"]
     is_running = True
     if req.action == "PAUSED" or req.keepRunning is False or is_paused_already:
         is_running = False
 
+    progress_val = float(getattr(job, "progress_percentage", 0.0) or 0.0)
     # Create handover record
     handover_rec = JobHandover(
         job_id=job.id,
@@ -570,8 +575,8 @@ async def handover_job(
         notes=req.notes,
         work_completed_summary=summary_text,
         active_seconds_before_handover=active_seconds_before,
-        status_at_handover=job.lifecycle_status,
-        progress_at_handover=float(job.progress_percentage or 0.0),
+        status_at_handover=str(getattr(job, "lifecycle_status", "") or ""),
+        progress_at_handover=progress_val,
         performed_by=user.username
     )
     db.add(handover_rec)
@@ -632,10 +637,11 @@ async def handover_job(
         "reason": req.reason,
         "handoverAt": now.isoformat(),
         "status": job.lifecycle_status,
-        "progressAtHandover": float(job.progress_percentage or 0.0),
+        "progressAtHandover": progress_val,
         "performed_by": user.username
     }
     await broadcaster.broadcast("job_handed_over", payload)
+    await broadcaster.broadcast("JOB_HANDOVER", payload)
     await broadcaster.broadcast("JOB_HANDOVER", payload)
 
     return {
@@ -657,7 +663,7 @@ async def get_job_handovers(
 ):
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -686,7 +692,7 @@ async def get_job_handovers(
             "notes": h.notes,
             "performedBy": h.performed_by
         }
-        for h in handovers
+        for h in cast(list[Any], handovers)
     ]
 
 # POST /api/jobs/{id}/progress
@@ -699,7 +705,7 @@ async def update_job_progress(
 ):
     stmt = select(Job).where(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job: Any = res.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -710,12 +716,15 @@ async def update_job_progress(
 
     if req.progress_percentage is not None:
         job.progress_percentage = req.progress_percentage
-    elif job.target_work_units and job.target_work_units > 0 and job.completed_work_units is not None:
-        job.progress_percentage = round((float(job.completed_work_units) / float(job.target_work_units)) * 100.0, 2)
+    else:
+        target_units = float(getattr(job, "target_work_units", 0) or 0)
+        completed_units = getattr(job, "completed_work_units", None)
+        if target_units > 0 and completed_units is not None:
+            job.progress_percentage = round((float(completed_units) / target_units) * 100.0, 2)
 
     now = datetime.now(timezone.utc)
     dur = int(getattr(job, "actual_duration_seconds", 0) or 0)
-    current_pct = float(job.progress_percentage or 0.0)
+    current_pct = float(getattr(job, "progress_percentage", 0.0) or 0.0)
 
     # Log progress history
     hist = JobProgressHistory(
@@ -729,7 +738,7 @@ async def update_job_progress(
     db.add(hist)
 
     # Terminal Process Log
-    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] PROGRESS | Job #{job.external_id} ({job.job_no}) progress updated by '{user.username}' | {current_pct}% ({job.completed_work_units}/{job.target_work_units} units) | Note: '{req.note or ''}'", flush=True)
+    print(f"[JOB-AUDIT {now.strftime('%Y-%m-%d %H:%M:%S UTC')}] PROGRESS | Job #{job.external_id} ({job.job_no}) progress updated by '{user.username}' | {current_pct}% ({getattr(job, 'completed_work_units', 0)}/{getattr(job, 'target_work_units', 0)} units) | Note: '{req.note or ''}'", flush=True)
 
     # Broadcast event for live timeline updates
     payload = {
@@ -737,13 +746,13 @@ async def update_job_progress(
         "job_id": job.external_id,
         "jobId": job.external_id,
         "jobNo": job.job_no,
-        "progress_percentage": float(job.progress_percentage or 0.0),
-        "progressPercentage": float(job.progress_percentage or 0.0),
-        "completed_work_units": job.completed_work_units,
-        "completedWorkUnits": job.completed_work_units,
-        "target_work_units": job.target_work_units,
-        "targetWorkUnits": job.target_work_units,
-        "status": job.lifecycle_status,
+        "progress_percentage": current_pct,
+        "progressPercentage": current_pct,
+        "completed_work_units": getattr(job, "completed_work_units", None),
+        "completedWorkUnits": getattr(job, "completed_work_units", None),
+        "target_work_units": getattr(job, "target_work_units", None),
+        "targetWorkUnits": getattr(job, "target_work_units", None),
+        "status": getattr(job, "lifecycle_status", None),
         "performed_by": user.username,
         "recorded_at": now.isoformat()
     }
@@ -753,12 +762,12 @@ async def update_job_progress(
     return {
         "ok": True,
         "job_id": job.external_id,
-        "progress_percentage": float(job.progress_percentage or 0.0),
-        "progressPercentage": float(job.progress_percentage or 0.0),
-        "completed_work_units": job.completed_work_units,
-        "completedWorkUnits": job.completed_work_units,
-        "target_work_units": job.target_work_units,
-        "targetWorkUnits": job.target_work_units
+        "progress_percentage": current_pct,
+        "progressPercentage": current_pct,
+        "completed_work_units": getattr(job, "completed_work_units", None),
+        "completedWorkUnits": getattr(job, "completed_work_units", None),
+        "target_work_units": getattr(job, "target_work_units", None),
+        "targetWorkUnits": getattr(job, "target_work_units", None)
     }
 
 

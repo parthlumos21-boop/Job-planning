@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import SearchJobsSection from '../components/SearchJobsSection';
-import DepartmentHandoverModal from './DepartmentHandoverModal';
 
 const DEPT_NAMES_MAP = {
   marketing: 'Marketing',
@@ -23,20 +22,26 @@ export default function SearchJobsPage() {
 
   const primaryDept = user?.departments?.[0] || '';
   const [selectedDept, setSelectedDept] = useState(isAdmin ? 'all' : primaryDept);
+  const [searchQuery, setSearchQuery] = useState('');
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeHandoverJob, setActiveHandoverJob] = useState(null);
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async (currentSearch = searchQuery, dept = selectedDept) => {
     try {
       setLoading(true);
-      const deptParam =
-        isAdmin && selectedDept !== 'all'
-          ? `?department=${selectedDept}`
-          : !isAdmin && primaryDept
-          ? `?department=${primaryDept}`
-          : '';
-      const res = await api.get(`/jobs${deptParam}`);
+      const params = new URLSearchParams();
+      if (currentSearch && currentSearch.trim()) {
+        params.set('search', currentSearch.trim());
+      }
+      if (isAdmin && dept && dept !== 'all') {
+        params.set('department', dept);
+      } else if (!isAdmin && primaryDept) {
+        params.set('department', primaryDept);
+      }
+
+      const queryString = params.toString();
+      const endpoint = queryString ? `/jobs?${queryString}` : '/jobs';
+      const res = await api.get(endpoint);
       const rawJobs = res.data?.jobs || (Array.isArray(res.data) ? res.data : []);
       setJobs(rawJobs);
     } catch (err) {
@@ -44,11 +49,11 @@ export default function SearchJobsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin, primaryDept, searchQuery, selectedDept]);
 
   useEffect(() => {
-    fetchJobs();
-  }, [selectedDept]);
+    fetchJobs(searchQuery, selectedDept);
+  }, [selectedDept, searchQuery, fetchJobs]);
 
   const userDeptDisplay = isAdmin
     ? ''
@@ -59,25 +64,14 @@ export default function SearchJobsPage() {
       <SearchJobsSection
         jobs={jobs}
         loading={loading}
-        onRefresh={fetchJobs}
+        onRefresh={() => fetchJobs(searchQuery, selectedDept)}
         isAdmin={isAdmin}
         selectedDept={selectedDept}
         onDeptChange={(newDept) => setSelectedDept(newDept)}
         userDeptName={userDeptDisplay}
-        onHandoverClick={(job) => setActiveHandoverJob(job)}
+        searchQuery={searchQuery}
+        onSearchChange={(q) => setSearchQuery(q)}
       />
-
-      {activeHandoverJob && (
-        <DepartmentHandoverModal
-          job={activeHandoverJob}
-          isOpen={Boolean(activeHandoverJob)}
-          onClose={() => setActiveHandoverJob(null)}
-          onHandoverSuccess={() => {
-            setActiveHandoverJob(null);
-            fetchJobs();
-          }}
-        />
-      )}
     </div>
   );
 }

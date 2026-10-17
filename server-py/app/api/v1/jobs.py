@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func, delete
+from sqlalchemy import select, update, func, delete, or_
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Any
 from app.db.session import get_db
 from app.api.deps import get_current_user
-from app.models import Job, Client, DepartmentAssignment, DepartmentActivity
+from app.models import Job, Client, DepartmentAssignment, DepartmentActivity, DepartmentTask
 from app.schemas import (
     UserPayload, FieldUpdateRequest, StatusUpdateRequest,
     BulkSelectRequest, SingleSelectRequest
@@ -117,6 +117,8 @@ def format_job_row(j: Job, department: str | None = None) -> dict:
         "visibleToDepartments": j.visible_to_departments or visible_departments_for_job(j),
         "departmentStatus": j.department_status or {},
         "selected": j.selected or False,
+        "createdBy": getattr(j, "createdBy", None) or "",
+        "creator": getattr(j, "createdBy", None) or "",
         "departmentFields": fields_dict.get(department, {}) if department else None,
         "marketingFields": fields_dict.get("marketing", {}),
         "engineers": display_engs,
@@ -216,10 +218,24 @@ async def list_jobs(
         # If an explicit department is requested, it must be within user_depts
         target_dept = department.lower() if (department and department.lower() in user_depts) else (user_depts[0] if user_depts else None)
         effective_dept = target_dept
+        user_name_lower = (current_user.name or current_user.username or "").strip().lower()
+        user_uname_lower = (current_user.username or "").strip().lower()
         if target_dept:
-            jobs = [j for j in jobs if target_dept in visible_departments_for_job(j)]
+            jobs = [
+                j for j in jobs
+                if target_dept in visible_departments_for_job(j)
+                or (getattr(j, "createdBy", "") or "").strip().lower() == user_uname_lower
+                or (j.responsible_engg_name or "").strip().lower() == user_name_lower
+                or j.assigned_engineer_id == current_user.id
+            ]
         elif user_depts:
-            jobs = [j for j in jobs if any(d in visible_departments_for_job(j) for d in user_depts)]
+            jobs = [
+                j for j in jobs
+                if any(d in visible_departments_for_job(j) for d in user_depts)
+                or (getattr(j, "createdBy", "") or "").strip().lower() == user_uname_lower
+                or (j.responsible_engg_name or "").strip().lower() == user_name_lower
+                or j.assigned_engineer_id == current_user.id
+            ]
     else:
         # Admin / Keval V Shah can filter by any department from dropdown or view all
         if department and department.lower() != "all":
@@ -249,14 +265,18 @@ async def list_jobs(
 
     if search and search.strip():
         q = search.strip().lower()
+        q_num = q.replace("job-", "").replace("job", "").replace("#", "").strip()
         jobs = [
             j for j in jobs
-            if q in (j.job_no or "").replace("#", "").strip().lower()
-            or q in (j.job_no or "").strip().lower()
+            if q in (j.job_no or "").strip().lower()
+            or q in (j.job_no or "").replace("#", "").strip().lower()
+            or (q_num and q_num in (j.job_no or "").replace("#", "").strip().lower())
             or q in (j.client_name or "").lower()
             or q in (j.project_name or "").lower()
             or q in (j.panel_name or "").lower()
             or q in (j.responsible_engg_name or "").lower()
+            or q in (j.lifecycle_status or "").lower()
+            or q in (j.target_department or "").lower()
         ]
 
     if selectedOnly == "true":
@@ -533,7 +553,7 @@ async def create_job(
     raw_job_no = str(body.get("jobNo", "")).strip()
     if raw_job_no:
         dup_stmt = select(Job).where(func.lower(Job.job_no) == raw_job_no.lower())
-        existing = (await db.execute(dup_stmt)).scalar_one_or_none()
+        existing = (await db.execute(dup_stmt)).scalars().first()
         if existing:
             raise HTTPException(
                 status_code=409,
@@ -548,8 +568,8 @@ async def create_job(
     client_name = body.get("clientName", "")
     client_id = body.get("clientId")
     if not client_id and client_name:
-        c_res = await db.execute(select(Client).where(Client.name == client_name))
-        c_match = c_res.scalar_one_or_none()
+        c_res = await db.execute(select(Client).where(func.lower(Client.name) == client_name.strip().lower()))
+        c_match = c_res.scalars().first()
         if c_match:
             client_id = c_match.external_id or c_match.id
 
@@ -582,7 +602,11 @@ async def create_job(
         target_department=body.get("targetDepartment", "marketing"),
         target_position=body.get("targetPosition", ""),
         createdBy=user.username,
-        visible_to_departments=body.get("visibleToDepartments", ["marketing"]),
+        visible_to_departments=list(set(
+            ["marketing", str(body.get("targetDepartment", "marketing") or "marketing").lower().strip()]
+            + [d.lower().strip() for d in (user.departments or []) if d and str(d).strip()]
+            + [str(d).lower().strip() for d in (body.get("visibleToDepartments") or []) if d and str(d).strip()]
+        )),
         selected=False,
         fields=body.get("fields") or body.get("allDepartmentsData") or {},
         engineers=body.get("engineers", {}),
@@ -597,6 +621,99 @@ async def create_job(
     )
 
     db.add(new_job)
+    await db.flush()
+
+    # Create and link DepartmentTask if myTask payload is present
+    my_task = body.get("myTask") or (body.get("fields") or {}).get("myTask")
+    if my_task and isinstance(my_task, dict):
+        try:
+            est_hours = float(my_task.get("estimatedEffortHours") or 0.0)
+        except Exception:
+            est_hours = 0.0
+
+        s_date_str = str(my_task.get("taskStartDate") or "").strip()[:10]
+        t_date_str = str(my_task.get("taskTargetCompletionDate") or "").strip()[:10]
+
+        from datetime import datetime, date
+        s_date = None
+        t_date = None
+        if s_date_str:
+            try:
+                s_date = datetime.strptime(s_date_str, "%Y-%m-%d").date()
+            except Exception:
+                pass
+        if t_date_str:
+            try:
+                t_date = datetime.strptime(t_date_str, "%Y-%m-%d").date()
+            except Exception:
+                pass
+
+        if not s_date:
+            s_date = date.today()
+        if not t_date:
+            t_date = s_date
+
+        u_dept = (user.departments[0] if user.departments else "marketing").lower()
+        dept_task = DepartmentTask(
+            job_id=new_job.id,
+            department=u_dept,
+            task_name=f"{u_dept.title()} Engineering Task",
+            description=f"Department task for Job #{new_job.job_no}",
+            assigned_user_id=user.id,
+            assigned_user_name=user.name or user.username,
+            created_by_user_id=user.id,
+            created_by_name=user.name or user.username,
+            start_date=s_date,
+            target_date=t_date,
+            estimated_effort_hours=est_hours,
+            actual_effort_hours=0.0,
+            progress_percentage=0,
+            status="In Progress"
+        )
+        db.add(dept_task)
+
+        # 1. Audit Activity: JOB_CREATED
+        job_act = DepartmentActivity(
+            job_id=new_job.id,
+            department=u_dept,
+            action="JOB_CREATED",
+            new_value={
+                "job_no": new_job.job_no,
+                "panel_name": new_job.panel_name,
+                "client_name": new_job.client_name,
+                "responsible_engineer": new_job.responsible_engineer,
+                "created_by": user.username
+            },
+            updated_by=user.username
+        )
+        db.add(job_act)
+
+        # 2. Audit Activity: TASK_CREATED
+        act = DepartmentActivity(
+            job_id=new_job.id,
+            department=u_dept,
+            action="TASK_CREATED",
+            new_value={
+                "task_name": dept_task.task_name,
+                "estimated_effort_hours": est_hours,
+                "start_date": str(s_date),
+                "target_date": str(t_date),
+                "assigned_user": user.name or user.username
+            },
+            updated_by=user.username
+        )
+        db.add(act)
+
+        # Store task summary in job.fields["myTask"]
+        curr_fields: dict[str, Any] = dict(getattr(new_job, "fields", None) or {})
+        curr_fields["myTask"] = {
+            "estimatedEffortHours": est_hours,
+            "taskStartDate": str(s_date),
+            "taskTargetCompletionDate": str(t_date)
+        }
+        setattr(new_job, "fields", curr_fields)
+        flag_modified(new_job, "fields")
+
     await db.commit()
     await db.refresh(new_job)
     return format_job_row(new_job)
@@ -682,9 +799,9 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(get_current_user)
 ):
-    stmt = select(Job).where(Job.external_id == id)
+    stmt = select(Job).where(or_(Job.external_id == id, Job.id == id)).order_by(Job.external_id == id)
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job = res.scalars().first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -704,12 +821,12 @@ async def patch_select_job(
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(get_current_user)
 ):
-    stmt = select(Job).where(Job.external_id == id)
+    stmt = select(Job).where(or_(Job.external_id == id, Job.id == id))
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job = res.scalars().first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    job.selected = req.selected
+    setattr(job, "selected", req.selected)
     await db.commit()
     return {"id": job.external_id, "selected": job.selected}
 
@@ -721,51 +838,87 @@ async def patch_job_field(
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(get_current_user)
 ):
-    stmt = select(Job).where(Job.external_id == id)
+    stmt = select(Job).where(or_(Job.external_id == id, Job.id == id))
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job = res.scalars().first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    target_dept = "marketing" if req.department == "marketing-lock" else req.department
+    def normalize_dept(d: str) -> str:
+        s = (d or "").lower()
+        if "market" in s: return "marketing"
+        if "mech" in s: return "mechanical"
+        if "elect" in s or "design" in s: return "design"
+        if "purch" in s or "proc" in s: return "purchase"
+        if "prod" in s or "qc" in s or "disp" in s: return "production"
+        return s
 
-    user_depts = set(user.departments or [])
+    raw_dept = "marketing" if req.department == "marketing-lock" else req.department
+    target_dept = normalize_dept(raw_dept)
+
+    user_dept_keys = {normalize_dept(d) for d in (user.departments or [])}
     is_admin = user.role in ["admin", "executive"] or is_keval(user)
 
-    if (target_dept in ["core", "marketing"] or req.department in ["core", "marketing"]) and not can_manage_core(user):
+    if (target_dept in ["core", "marketing"]) and not is_admin and "marketing" not in user_dept_keys:
         raise HTTPException(status_code=403, detail="Only admins and marketing can edit core and marketing fields")
 
-    if not is_admin and target_dept not in ["core", "marketing"] and target_dept not in user_depts:
+    if not is_admin and target_dept not in ["core", "marketing"] and target_dept not in user_dept_keys:
         raise HTTPException(
             status_code=403,
             detail=f"Forbidden: You are not authorized to update fields in the '{target_dept}' department"
         )
 
-    current_fields = dict(job.fields or {})
-    dept_fields = dict(current_fields.get(target_dept, {}))
+    current_fields: dict[str, Any] = dict(getattr(job, "fields", None) or {})
+    dept_raw = current_fields.get(raw_dept)
+    dept_target = current_fields.get(target_dept)
+    dept_source = dept_raw if isinstance(dept_raw, dict) else (dept_target if isinstance(dept_target, dict) else {})
+    dept_fields: dict[str, Any] = dict(dept_source)
     dept_fields[req.field] = req.value
-    current_fields[target_dept] = dept_fields
-    job.fields = current_fields
+    current_fields[raw_dept] = dept_fields
+    if raw_dept != target_dept:
+        current_fields[target_dept] = dept_fields
+    setattr(job, "fields", current_fields)
     flag_modified(job, "fields")
 
-    # If updating core fields
-    if target_dept == "core" or target_dept == "marketing":
-        if req.field == "Job No.":
-            job.job_no = str(req.value)
-        elif req.field == "Name of Panel":
-            job.panel_name = str(req.value)
-        elif req.field == "Project Name":
-            job.project_name = str(req.value)
-        elif req.field == "Responsible Engg. Name":
-            job.responsible_engg_name = str(req.value)
-        elif req.field == "Type of Industries":
-            job.type_of_industries = str(req.value)
-        elif req.field == "Type of Panel":
-            job.type_of_panel = str(req.value)
-        elif req.field == "Incomer Rating":
-            job.incomer_rating = str(req.value)
+    # If updating core fields, sync directly to PostgreSQL columns in jobs table
+    if target_dept in ["core", "marketing"]:
+        f_key = req.field.lower().replace(" ", "").replace(".", "").replace("_", "")
+        val_str = str(req.value or "").strip()
+        field_attr_map = {
+            "jobno": "job_no",
+            "nameofpanel": "panel_name",
+            "panelname": "panel_name",
+            "projectname": "project_name",
+            "clientname": "client_name",
+            "customername": "client_name",
+            "responsibleenggname": "responsible_engg_name",
+            "responsibleengineer": "responsible_engg_name",
+            "responsibleengg": "responsible_engg_name",
+            "typeofindustries": "type_of_industries",
+            "typeofpanel": "type_of_panel",
+            "incomerrating": "incomer_rating",
+            "qty": "qty",
+            "pono": "po_no",
+            "purchaseorder": "po_no",
+            "podate": "po_date",
+            "purchaseorderdate": "po_date",
+            "deliveryperiod": "delivery_period",
+            "deliveryperiodasperpo": "delivery_period",
+            "deliverydate": "delivery_date",
+            "deliverydateasperpo": "delivery_date",
+            "datagiventodesign": "data_given_to_design",
+            "datagiventodesigndept": "data_given_to_design",
+            "deliveryaddress": "delivery_address",
+            "contactperson": "contact_person",
+            "contactpersonphno": "contact_person",
+        }
+        target_attr = field_attr_map.get(f_key)
+        if target_attr:
+            final_val = (val_str or "1") if target_attr == "qty" else val_str
+            setattr(job, target_attr, final_val)
 
     await db.commit()
+    await db.refresh(job)
     return {"ok": True}
 
 # PATCH /api/jobs/{id}/status
@@ -779,15 +932,15 @@ async def patch_job_status(
     if req.status not in ["pending", "completed"]:
         raise HTTPException(status_code=400, detail="Invalid status")
 
-    stmt = select(Job).where(Job.external_id == id)
+    stmt = select(Job).where(or_(Job.external_id == id, Job.id == id))
     res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job = res.scalars().first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    current_status = dict(job.department_status or {})
+    current_status: dict[str, Any] = dict(getattr(job, "department_status", None) or {})
     current_status[req.department] = req.status
-    job.department_status = current_status
+    setattr(job, "department_status", current_status)
     flag_modified(job, "department_status")
 
     await db.commit()
@@ -803,7 +956,7 @@ async def delete_job(
     if user.role not in ["admin", "executive"] and not is_keval(user):
         raise HTTPException(status_code=403, detail="Only admins can delete jobs")
 
-    stmt = delete(Job).where(Job.external_id == id)
+    stmt = delete(Job).where(or_(Job.external_id == id, Job.id == id))
     res = await db.execute(stmt)
     await db.commit()
     return {"ok": True}

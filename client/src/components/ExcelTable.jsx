@@ -57,37 +57,40 @@ export default function ExcelTable({ jobs, onJobUpdated, user, hideActions = fal
   }
 
   const handleEditClick = (job, department, field, currentValue) => {
-    setEditingCell({ jobId: job.id || job._id, department, field });
+    const resolvedId = job.externalId || job.external_id || job.id || job._id;
+    setEditingCell({ jobId: resolvedId, department, field });
     setEditValue(currentValue || '');
   };
 
-  const handleSave = async (job) => {
+  const handleSave = async (job, directValue = null) => {
     if (!editingCell) return;
     const { department, field } = editingCell;
-    const jobId = editingCell.jobId;
+    const val = directValue !== null ? directValue : editValue;
+    const resolvedId = editingCell.jobId || job.externalId || job.external_id || job.id || job._id;
     
     setEditingCell(null);
 
+    // Instant optimistic update in memory so table UI never reverts
     if (onJobUpdated) {
-      onJobUpdated(jobId, department, field, editValue);
+      onJobUpdated(resolvedId, department, field, val);
     }
 
     try {
-      await api.patch(`/jobs/${jobId}/field`, { department, field, value: editValue });
+      await api.patch(`/jobs/${resolvedId}/field`, { department, field, value: val });
 
-      if (editValue && isDepartmentUserField(field)) {
+      if (val && isDepartmentUserField(field)) {
         const dateField = getAssociatedDateField(department, field);
         if (dateField) {
           const deptData = department === 'marketing' ? job : (job.allDepartmentsData?.[department] || job.fields?.[department] || {});
           if (!deptData[dateField]) {
             const today = new Date().toISOString().split('T')[0];
-            if (onJobUpdated) onJobUpdated(jobId, department, dateField, today);
-            await api.patch(`/jobs/${jobId}/field`, { department, field: dateField, value: today });
+            if (onJobUpdated) onJobUpdated(resolvedId, department, dateField, today);
+            await api.patch(`/jobs/${resolvedId}/field`, { department, field: dateField, value: today });
           }
         }
       }
     } catch (err) {
-      console.error('Failed to update field', err);
+      console.error('Failed to update field in PostgreSQL:', err);
     }
   };
 
@@ -207,7 +210,11 @@ export default function ExcelTable({ jobs, onJobUpdated, user, hideActions = fal
                       currentValue = '';
                     }
 
-                    const isEditing = editingCell && editingCell.jobId === (job.id || job._id) && editingCell.department === dept.key && editingCell.field === field;
+                    const jResolvedId = job.externalId || job.external_id || job.id || job._id;
+                    const isEditing = editingCell && 
+                      (editingCell.jobId === jResolvedId || editingCell.jobId === job.id || editingCell.jobId === job._id || editingCell.jobId === job.externalId) && 
+                      editingCell.department === dept.key && 
+                      editingCell.field === field;
                     
                     return (
                       <td 
@@ -224,7 +231,11 @@ export default function ExcelTable({ jobs, onJobUpdated, user, hideActions = fal
                               <select
                                 autoFocus
                                 value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
+                                onChange={(e) => {
+                                  const newVal = e.target.value;
+                                  setEditValue(newVal);
+                                  handleSave(job, newVal);
+                                }}
                                 onBlur={() => handleSave(job)}
                                 onKeyDown={(e) => handleKeyDown(e, job)}
                                 className="w-full h-full p-2 outline-none bg-transparent text-xs"

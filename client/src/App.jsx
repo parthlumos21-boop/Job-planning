@@ -15,7 +15,7 @@ import KevalDashboard from './dashboard/KevalDashboard';
 import AdminOversightDashboard from './dashboard/AdminOversightDashboard';
 import LiveActivityDashboard from './dashboard/LiveActivityDashboard';
 import SearchJobsPage from './jobs/SearchJobsPage';
-import MarketingMyTasksPage from './jobs/marketing/MarketingMyTasksPage';
+import DepartmentMyTasksPage from './jobs/DepartmentMyTasksPage';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -24,8 +24,17 @@ function PrivateRoute({ children }) {
 
 function AdminOnlyRoute({ children }) {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || user?.username?.toLowerCase() === 'keval v shah';
+  const role = (user?.role || '').toLowerCase();
+  const username = (user?.username || '').toLowerCase();
+  const isAdmin = role === 'admin' || role === 'executive' || role === 'superadmin' || username === 'keval v shah' || username === 'keval' || username === 'kevalvshah';
   return isAdmin ? children : <Navigate to="/" replace />;
+}
+
+function KevalOnlyRoute({ children }) {
+  const { user } = useAuth();
+  const username = (user?.username || '').trim().toLowerCase();
+  const isKeval = username === 'keval v shah' || username === 'keval' || username === 'kevalvshah';
+  return isKeval ? children : <Navigate to="/" replace />;
 }
 
 function JobsRoute() {
@@ -41,7 +50,7 @@ function App() {
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="search-jobs" element={<SearchJobsPage />} />
-            <Route path="my-tasks" element={<MarketingMyTasksPage />} />
+            <Route path="my-tasks" element={<DepartmentMyTasksPage />} />
             <Route path="my-jobs" element={<MyJobs />} />
             <Route path="jobs" element={<JobsRoute />} />
             <Route path="jobs/handover" element={<AdminOnlyRoute><PlanningHandoverInbox /></AdminOnlyRoute>} />
@@ -50,7 +59,7 @@ function App() {
             <Route path="jobs/edit/:id" element={<NewJobForm />} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="chart" element={<AdminOnlyRoute><ChartPage /></AdminOnlyRoute>} />
-            <Route path="live-activity" element={<AdminOnlyRoute><LiveActivityDashboard /></AdminOnlyRoute>} />
+            <Route path="live-activity" element={<KevalOnlyRoute><LiveActivityDashboard /></KevalOnlyRoute>} />
             <Route path="live-monitor" element={<AdminOnlyRoute><KevalDashboard /></AdminOnlyRoute>} />
             <Route path="admin/dashboard" element={<AdminOnlyRoute><AdminOversightDashboard /></AdminOnlyRoute>} />
             <Route path="reports" element={<AdminOnlyRoute><Reports /></AdminOnlyRoute>} />

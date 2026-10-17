@@ -525,39 +525,6 @@ export default function MarketingJobDashboard() {
           )}
         </div>
 
-        {/* 7 Actionable Workflow Status Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 border-t border-slate-100">
-          {[
-            { id: 'all', label: 'All Jobs', count: tabCounts.all },
-            { id: 'my_open', label: 'My Open Jobs', count: tabCounts.my_open },
-            { id: 'in_progress', label: 'In Progress', count: tabCounts.in_progress },
-            { id: 'ready_to_release', label: 'Ready to Release to Design', count: tabCounts.ready_to_release },
-            { id: 'awaiting_acceptance', label: 'Awaiting Design Acceptance', count: tabCounts.awaiting_acceptance },
-            { id: 'returned', label: 'Returned for Correction', count: tabCounts.returned },
-            { id: 'overdue', label: 'Overdue', count: tabCounts.overdue }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                activeFilter === tab.id
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  activeFilter === tab.id
-                    ? 'bg-white/20 text-white'
-                    : 'bg-white text-slate-700 border border-slate-200'
-                }`}
-              >
-                {tab.count}
-              </span>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Internal Marketing Table (10 Requested Core Fields) */}

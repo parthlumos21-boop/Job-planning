@@ -20,32 +20,32 @@ export default function Login() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-r from-cyan-200 via-purple-200 to-pink-200 py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center bg-[#F5F8FC] py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
 
-      <div className="relative z-10 max-w-md w-full space-y-8 bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-slate-200">
+      <div className="relative z-10 max-w-md w-full space-y-8 bg-white p-8 rounded-3xl shadow-xl border border-[#DCE5F0]">
         <div className="flex flex-col items-center">
           <img
             src="/21.png"
             alt="Swati Switchgears logo"
-            className="h-28 w-28 rounded-full object-contain"
+            className="h-28 w-28 rounded-full object-contain drop-shadow-sm"
           />
 
-          <p className="mt-2 text-center text-[22px] font-bold text-black">
+          <p className="mt-4 text-center text-[22px] font-black text-[#172B4D] tracking-tight">
             Job Planning System
           </p>
-          <p className="mt-3 text-center text-base text-gray-600 font-normal">
+          <p className="mt-1 text-center text-sm text-[#64748B] font-medium">
             Sign in to access your department workflow
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-sm text-sm text-center font-medium">{error}</div>}
+          {error && <div className="bg-[#FEE2E2] border border-[#B91C1C]/20 text-[#B91C1C] p-3 rounded-xl text-xs text-center font-bold">{error}</div>}
           <div className="space-y-4">
             <div>
               <input
                 name="username"
                 type="text"
                 required
-                className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-indigo-300 text-indigo-900 rounded-xl focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 text-base md:text-lg font-normal"
+                className="appearance-none relative block w-full px-4 py-3 border border-[#DCE5F0] placeholder-[#64748B]/60 text-[#172B4D] bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1769FF]/20 focus:border-[#1769FF] focus:z-10 text-sm font-medium"
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -56,17 +56,18 @@ export default function Login() {
                 name="password"
                 type="password"
                 required
-                className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-indigo-300 text-indigo-900 rounded-xl focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 text-base md:text-lg font-normal"
+                className="appearance-none relative block w-full px-4 py-3 border border-[#DCE5F0] placeholder-[#64748B]/60 text-[#172B4D] bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1769FF]/20 focus:border-[#1769FF] focus:z-10 text-sm font-medium"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
           </div>
+
           <div>
             <button
               type="submit"
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-lg font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-md transform transition hover:-translate-y-0.5"
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-[#1769FF] hover:bg-[#1256D8] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1769FF] shadow-xs transition-all"
             >
               Sign In
             </button>

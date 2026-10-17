@@ -109,7 +109,7 @@ async def get_running_jobs(
             "actualEndAt": j.actual_end_at.isoformat() if j.actual_end_at else None,
             "totalPausedSeconds": j.total_paused_seconds or 0,
             "pauseStartedAt": j.pause_started_at.isoformat() if j.pause_started_at else None,
-            "progressPercentage": float(j.progress_percentage or 0.0),
+            "progressPercentage": float(getattr(j, "progress_percentage", 0.0) or 0.0),
             **metrics
         })
 
@@ -154,12 +154,14 @@ async def get_job_timeline(
     handovers = h_res.scalars().all()
 
     # Dynamic Time Bounds Calculation (Dynamic Sliding Window)
-    start_candidates = [ts for ts in [job.planned_start_at, job.actual_start_at] if ts]
-    if sessions and sessions[0].started_at:
-        start_candidates.append(sessions[0].started_at)
+    start_candidates: list[datetime] = [ts for ts in [getattr(job, "planned_start_at", None), getattr(job, "actual_start_at", None)] if ts]
+    if sessions:
+        s0_start = getattr(sessions[0], "started_at", None)
+        if s0_start:
+            start_candidates.append(s0_start)
     scale_start = min(start_candidates) if start_candidates else now
 
-    end_candidates = [ts for ts in [job.planned_end_at, job.actual_end_at] if ts]
+    end_candidates: list[datetime] = [ts for ts in [getattr(job, "planned_end_at", None), getattr(job, "actual_end_at", None)] if ts]
     end_candidates.append(now)
     scale_end = max(end_candidates)
 
@@ -297,7 +299,8 @@ async def get_timeline_overview(
     all_sessions = s_res.scalars().all()
     sessions_by_job: dict[int, list] = {}
     for s in all_sessions:
-        sessions_by_job.setdefault(s.job_id, []).append(s)
+        s_jid = int(getattr(s, "job_id", 0) or 0)
+        sessions_by_job.setdefault(s_jid, []).append(s)
 
     # 4. Batch fetch handovers
     h_stmt = select(JobHandover).where(
@@ -307,18 +310,25 @@ async def get_timeline_overview(
     all_handovers = h_res.scalars().all()
     handovers_by_job: dict[int, list] = {}
     for h in all_handovers:
-        handovers_by_job.setdefault(h.job_id, []).append(h)
+        h_jid = int(getattr(h, "job_id", 0) or 0)
+        handovers_by_job.setdefault(h_jid, []).append(h)
 
     # 5. Determine Scale Boundaries
-    all_ts = [now]
+    all_ts: list[datetime] = [now]
     for j in jobs:
-        if j.planned_start_at: all_ts.append(j.planned_start_at)
-        if j.planned_end_at: all_ts.append(j.planned_end_at)
-        if j.actual_start_at: all_ts.append(j.actual_start_at)
-        if j.actual_end_at: all_ts.append(j.actual_end_at)
+        ps = getattr(j, "planned_start_at", None)
+        pe = getattr(j, "planned_end_at", None)
+        as_ = getattr(j, "actual_start_at", None)
+        ae = getattr(j, "actual_end_at", None)
+        if ps: all_ts.append(ps)
+        if pe: all_ts.append(pe)
+        if as_: all_ts.append(as_)
+        if ae: all_ts.append(ae)
     for s in all_sessions:
-        if s.started_at: all_ts.append(s.started_at)
-        if s.ended_at: all_ts.append(s.ended_at)
+        ss = getattr(s, "started_at", None)
+        se = getattr(s, "ended_at", None)
+        if ss: all_ts.append(ss)
+        if se: all_ts.append(se)
 
     min_ts = min(all_ts)
     max_ts = max(all_ts)
@@ -359,7 +369,8 @@ async def get_timeline_overview(
         current_name = users_map.get(j.current_worker_id) or j.planning_owner_name or assigned_name
         assigned_by = users_map.get(getattr(j, "assigned_by_user_id", None), "Admin")
 
-        j_sessions = sessions_by_job.get(j.id, [])
+        j_id = int(getattr(j, "id", 0) or 0)
+        j_sessions = sessions_by_job.get(j_id, [])
         session_blocks = []
         for s in j_sessions:
             end_t = s.ended_at or (now if j.lifecycle_status in ["Running", "In Progress"] else s.started_at)
@@ -376,7 +387,7 @@ async def get_timeline_overview(
                 "notes": s.notes
             })
 
-        j_handovers = handovers_by_job.get(j.id, [])
+        j_handovers = handovers_by_job.get(j_id, [])
         last_ho = j_handovers[-1] if j_handovers else None
 
         job_items.append({
@@ -513,7 +524,7 @@ async def get_job_timeline_history(
                 "notes": h.notes,
                 "workCompletedSummary": h.work_completed_summary,
                 "statusAtHandover": getattr(h, "status_at_handover", None),
-                "progressAtHandover": float(h.progress_at_handover) if getattr(h, "progress_at_handover", None) is not None else None,
+                "progressAtHandover": float(getattr(h, "progress_at_handover", 0.0) or 0.0) if getattr(h, "progress_at_handover", None) is not None else None,
                 "activeSecondsBefore": h.active_seconds_before_handover,
                 "performedBy": h.performed_by
             }
@@ -537,7 +548,7 @@ async def get_job_timeline_history(
             {
                 "id": p.id,
                 "recordedAt": p.recorded_at.isoformat() if p.recorded_at else None,
-                "progressPercentage": float(p.progress_percentage),
+                "progressPercentage": float(getattr(p, "progress_percentage", 0.0) or 0.0),
                 "activeDurationSeconds": p.active_duration_seconds,
                 "recordedBy": p.recorded_by,
                 "note": p.note
@@ -550,7 +561,7 @@ async def get_job_timeline_history(
 @router.get("/stream")
 async def live_monitoring_stream(
     request: Request,
-    user: UserPayload = Depends(get_current_user)
+    user: UserPayload = Depends(require_admin)
 ):
     queue = broadcaster.subscribe()
 

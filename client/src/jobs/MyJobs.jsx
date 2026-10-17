@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, Search, RefreshCw, Loader2 } from 'lucide-react';
 import ExcelTable from '../components/ExcelTable';
 
 export default function MyJobs() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,22 +31,70 @@ export default function MyJobs() {
     fetchJobs();
   }, []);
 
+  const handleJobUpdated = (jobId, department, field, value) => {
+    setJobs(prevJobs => prevJobs.map(job => {
+      const jId = job.id || job._id;
+      const jExtId = job.externalId || job.external_id;
+      if (jId !== jobId && jExtId !== jobId) return job;
+
+      const isCore = department === 'marketing';
+      const updated = {
+        ...job,
+        allDepartmentsData: {
+          ...(job.allDepartmentsData || {}),
+          [department]: {
+            ...((job.allDepartmentsData || {})[department] || {}),
+            [field]: value
+          }
+        },
+        fields: {
+          ...(job.fields || {}),
+          [department]: {
+            ...((job.fields || {})[department] || {}),
+            [field]: value
+          }
+        }
+      };
+
+      if (isCore) {
+        updated[field] = value;
+        if (field === 'Job No.' || field === 'jobNo') updated.jobNo = value;
+        if (field === 'Name of Panel' || field === 'panelName') updated.panelName = value;
+        if (field === 'Customer Name' || field === 'clientName') updated.clientName = value;
+        if (field === 'Responsible Engg. Name' || field === 'responsibleEnggName') updated.responsibleEnggName = value;
+        if (field === 'Project Name' || field === 'projectName') updated.projectName = value;
+        if (field === 'Qty.' || field === 'qty') updated.qty = value;
+        if (field === 'Purchase Order' || field === 'poNo') updated.poNo = value;
+        if (field === 'Purchase Order Date' || field === 'poDate') updated.poDate = value;
+        if (field === 'Type of Industries' || field === 'typeOfIndustries') updated.typeOfIndustries = value;
+        if (field === 'Type of Panel' || field === 'typeOfPanel') updated.typeOfPanel = value;
+        if (field === 'Incomer Rating' || field === 'incomerRating') updated.incomerRating = value;
+      }
+
+      return updated;
+    }));
+  };
+
   const userNameLower = (user?.name || user?.username || '').toLowerCase();
   const userDepts = useMemo(() => new Set((user?.departments || []).map(d => d.toLowerCase())), [user]);
   const isAdmin = user?.role === 'admin' || user?.role === 'executive';
+
+  const userUnameLower = (user?.username || '').toLowerCase().trim();
 
   // Filter jobs for current user with guaranteed deduplication
   const myJobs = useMemo(() => {
     const matched = jobs.filter(j => {
       if (isAdmin) return true; // Admins have full access
       
-      const isResp = (j.responsibleEnggName || '').toLowerCase() === userNameLower || j.assignedEngineerId === user?.id;
-      const isPlanOwner = (j.planningOwnerName || '').toLowerCase() === userNameLower || j.planningOwnerId === user?.id;
-      const isWorker = j.currentWorkerId === user?.id;
-      const isCreator = (j.createdBy || '').toLowerCase() === (user?.username || '').toLowerCase();
+      const creatorName = (j.createdBy || j.creator || '').toLowerCase().trim();
+      const isCreator = Boolean(creatorName && (creatorName === userUnameLower || creatorName === userNameLower));
       
-      const visibleDepts = (j.visibleToDepartments || []).map(d => d.toLowerCase());
-      const inDept = visibleDepts.some(d => userDepts.has(d)) || userDepts.has((j.targetDepartment || '').toLowerCase());
+      const isResp = (j.responsibleEnggName || '').toLowerCase().trim() === userNameLower || j.assignedEngineerId === user?.id;
+      const isPlanOwner = (j.planningOwnerName || '').toLowerCase().trim() === userNameLower || j.planningOwnerId === user?.id;
+      const isWorker = j.currentWorkerId === user?.id;
+      
+      const visibleDepts = (j.visibleToDepartments || []).map(d => String(d).toLowerCase().trim());
+      const inDept = visibleDepts.some(d => userDepts.has(d)) || userDepts.has((j.targetDepartment || '').toLowerCase().trim());
 
       return isResp || isPlanOwner || isWorker || isCreator || inDept;
     });
@@ -58,7 +107,7 @@ export default function MyJobs() {
       seen.add(key);
       return true;
     });
-  }, [jobs, userNameLower, user?.id, userDepts, isAdmin]);
+  }, [jobs, userNameLower, userUnameLower, user?.id, userDepts, isAdmin]);
 
   // Apply search & status filter
   const filteredJobs = useMemo(() => {
@@ -150,7 +199,13 @@ export default function MyJobs() {
             No jobs found matching your criteria in Register.
           </div>
         ) : (
-          <ExcelTable jobs={filteredJobs} user={user} onJobUpdated={fetchJobs} hideActions={false} />
+          <ExcelTable 
+            jobs={filteredJobs} 
+            user={user} 
+            onJobUpdated={handleJobUpdated} 
+            hideActions={true} 
+            onRowClick={(job) => navigate(`/jobs/${job.id || job._id || job.externalId}`)}
+          />
         )}
       </div>
     </div>

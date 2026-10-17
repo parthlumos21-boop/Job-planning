@@ -8,12 +8,21 @@ import { DEPARTMENT_PROGRESS } from './jobProgress';
 import DepartmentHandoverModal from './DepartmentHandoverModal';
 import { cleanJobNo, isMarketingUser } from '../config/marketingFormConfig';
 
+const DEPT_LABELS = {
+  marketing: 'Marketing',
+  design: 'Design (Electrical)',
+  mechanical: 'Design (Mechanical)',
+  purchase: 'Purchase',
+  production: 'Production'
+};
+
 export default function JobList({ title }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const searchNameQuery = searchParams.get('client');
   const searchJobNoQuery = searchParams.get('search');
+  const searchDeptQuery = searchParams.get('department');
 
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,11 +34,18 @@ export default function JobList({ title }) {
   const jobsPerPage = 10;
 
   const isKeval = user?.username?.toLowerCase() === 'keval v shah';
+  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || isKeval;
+  const userPrimaryDept = (user?.departments?.[0] || 'marketing').toLowerCase();
+  const effectiveDept = isAdmin ? searchDeptQuery : (searchDeptQuery || userPrimaryDept);
 
   useEffect(() => {
+    if (searchDeptQuery && searchDeptQuery.toLowerCase() === 'marketing') {
+      navigate('/my-jobs', { replace: true });
+      return;
+    }
     fetchJobs();
     // eslint-disable-next-line
-  }, [location.search, searchNameQuery, searchJobNoQuery]);
+  }, [location.search, searchNameQuery, searchJobNoQuery, searchDeptQuery]);
 
   useEffect(() => {
     if (selectedJob && jobs.length > 0) {
@@ -46,6 +62,7 @@ export default function JobList({ title }) {
       const queryParams = new URLSearchParams();
       if (searchNameQuery) queryParams.set('client', searchNameQuery);
       if (searchJobNoQuery) queryParams.set('search', searchJobNoQuery);
+      if (effectiveDept && effectiveDept !== 'all') queryParams.set('department', effectiveDept);
       
       const endpoint = `/jobs?${queryParams.toString()}`;
       
@@ -61,12 +78,12 @@ export default function JobList({ title }) {
 
   const handleJobUpdated = (jobId, department, field, value) => {
     setJobs(prevJobs => prevJobs.map(job => {
-      if ((job.id || job._id) !== jobId) return job;
+      const jId = job.id || job._id;
+      const jExtId = job.externalId || job.external_id;
+      if (jId !== jobId && jExtId !== jobId) return job;
+
       const isCore = department === 'marketing';
-      if (isCore) {
-        return { ...job, [field]: value };
-      }
-      return {
+      const updated = {
         ...job,
         allDepartmentsData: {
           ...(job.allDepartmentsData || {}),
@@ -83,6 +100,23 @@ export default function JobList({ title }) {
           }
         }
       };
+
+      if (isCore) {
+        updated[field] = value;
+        if (field === 'Job No.' || field === 'jobNo') updated.jobNo = value;
+        if (field === 'Name of Panel' || field === 'panelName') updated.panelName = value;
+        if (field === 'Customer Name' || field === 'clientName') updated.clientName = value;
+        if (field === 'Responsible Engg. Name' || field === 'responsibleEnggName') updated.responsibleEnggName = value;
+        if (field === 'Project Name' || field === 'projectName') updated.projectName = value;
+        if (field === 'Qty.' || field === 'qty') updated.qty = value;
+        if (field === 'Purchase Order' || field === 'poNo') updated.poNo = value;
+        if (field === 'Purchase Order Date' || field === 'poDate') updated.poDate = value;
+        if (field === 'Type of Industries' || field === 'typeOfIndustries') updated.typeOfIndustries = value;
+        if (field === 'Type of Panel' || field === 'typeOfPanel') updated.typeOfPanel = value;
+        if (field === 'Incomer Rating' || field === 'incomerRating') updated.incomerRating = value;
+      }
+
+      return updated;
     }));
   };
 
@@ -114,7 +148,16 @@ export default function JobList({ title }) {
     <div className="mt-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">{title}</h2>
+          <h2 className="text-xl font-bold text-slate-900">
+            {effectiveDept && effectiveDept !== 'all' 
+              ? `${DEPT_LABELS[effectiveDept] || effectiveDept.toUpperCase()} Jobs Queue`
+              : (title || 'All Jobs Queue')}
+          </h2>
+          {!isAdmin && effectiveDept && (
+            <p className="text-xs text-slate-500 mt-0.5">
+              Showing jobs assigned to and active in your department
+            </p>
+          )}
         </div>
         <div className="flex items-center space-x-3">
           <div className="relative w-72">
@@ -139,6 +182,7 @@ export default function JobList({ title }) {
           jobs={currentJobs} 
           user={user} 
           hideActions={true} 
+          filterDepartments={!isAdmin && effectiveDept && effectiveDept !== 'all' ? [effectiveDept] : undefined}
           onJobUpdated={handleJobUpdated}
           onRowClick={(job) => setSelectedJob(job)}
         />
@@ -200,13 +244,15 @@ export default function JobList({ title }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowHandoverModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-all"
-              >
-                <ArrowRightLeft size={14} />
-                <span>Planning Control Center</span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowHandoverModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-all"
+                >
+                  <ArrowRightLeft size={14} />
+                  <span>Planning Control Center</span>
+                </button>
+              )}
               <Link
                 to={`/jobs/${selectedJob.id || selectedJob._id || selectedJob.externalId}`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"

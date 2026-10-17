@@ -32,9 +32,11 @@ async def get_current_user(
     )
 
 def is_admin_or_keval(user: UserPayload) -> bool:
+    role = (user.role or "").lower()
+    uname = (user.username or "").lower()
     return (
-        user.role in ["admin", "executive"]
-        or (user.username or "").lower() == "keval v shah"
+        role in ["admin", "executive", "superadmin"]
+        or uname in ["keval v shah", "keval", "kevalvshah"]
     )
 
 async def require_admin(
@@ -44,6 +46,20 @@ async def require_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access restricted to administrators only"
+        )
+    return user
+
+def is_keval_user(user: UserPayload) -> bool:
+    uname = (user.username or "").strip().lower()
+    return uname in ["keval v shah", "keval", "kevalvshah"]
+
+async def require_keval(
+    user: UserPayload = Depends(get_current_user)
+) -> UserPayload:
+    if not is_keval_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted exclusively to Keval V Shah."
         )
     return user
 

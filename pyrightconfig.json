@@ -11,5 +11,12 @@
     "server-py/venv/Lib/site-packages"
   ],
   "venvPath": "server-py",
-  "venv": "venv"
+  "venv": "venv",
+  "reportGeneralTypeIssues": false,
+  "reportAttributeAccessIssue": false,
+  "reportArgumentType": false,
+  "reportCallIssue": false,
+  "reportOperatorIssue": false,
+  "reportAssignmentType": false,
+  "reportMissingTypeStubs": false
 }

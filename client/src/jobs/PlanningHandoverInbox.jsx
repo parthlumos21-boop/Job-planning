@@ -378,56 +378,6 @@ export default function PlanningHandoverInbox() {
         })}
       </div>
 
-      {/* MY ACTIONS STRIP */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-4 rounded-2xl shadow-sm border border-slate-800 text-white">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-              <Sparkles size={14} className="text-amber-400" />
-              My Actions:
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { id: 'waiting_for_me', label: 'Waiting for Me', count: myActionCounts.waitingForMe, color: 'hover:border-amber-400' },
-              { id: 'assigned_to_me', label: 'Assigned to Me', count: myActionCounts.assignedToMe, color: 'hover:border-blue-400' },
-              { id: 'returned_to_me', label: 'Returned to Me', count: myActionCounts.returnedToMe, color: 'hover:border-rose-400' },
-              { id: 'due_today', label: 'Due Today', count: myActionCounts.dueToday, color: 'hover:border-emerald-400' },
-              { id: 'overdue', label: 'Overdue', count: myActionCounts.overdue, color: 'hover:border-rose-400' }
-            ].map(action => (
-              <button
-                key={action.id}
-                onClick={() => {
-                  setMyActionFilter(prev => prev === action.id ? null : action.id);
-                  setActiveStageFilter('ALL');
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                  myActionFilter === action.id
-                    ? 'bg-white text-slate-900 border-white shadow-sm'
-                    : `bg-slate-800/80 text-slate-200 border-slate-700 ${action.color}`
-                }`}
-              >
-                <span>{action.label}</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  myActionFilter === action.id ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-200'
-                }`}>
-                  {action.count}
-                </span>
-              </button>
-            ))}
-
-            {myActionFilter && (
-              <button
-                onClick={() => setMyActionFilter(null)}
-                className="text-[11px] text-indigo-300 hover:text-white underline ml-2"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* SEARCH & MULTI-DIMENSIONAL FILTERS */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">

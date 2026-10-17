@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { ArrowLeft, Save, Loader2, Search, Filter, Plus, Minus, Send } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Search, Filter, Plus, Minus, Send, CheckSquare, Clock, Calendar, X } from 'lucide-react';
 import { DEPARTMENT_USER_OPTIONS } from './departmentUserOptions';
 import SearchableUserSelect from './SearchableUserSelect';
 import {
@@ -295,7 +295,13 @@ export default function NewJobForm() {
             if (m) pdfSet.add(parseInt(m[1], 10));
           });
           detectedDocs.PDF = Array.from(pdfSet).sort((a, b) => a - b);
-          setDocRevisions(detectedDocs);
+          if (job.fields?.myTask) {
+            setMyTask({
+              estimatedEffortHours: job.fields.myTask.estimatedEffortHours || '',
+              taskStartDate: job.fields.myTask.taskStartDate || new Date().toISOString().split('T')[0],
+              taskTargetCompletionDate: job.fields.myTask.taskTargetCompletionDate || ''
+            });
+          }
         } catch (err) {
           console.error('Failed to fetch job for editing', err);
         }
@@ -325,6 +331,20 @@ export default function NewJobForm() {
     CONTROL: [0],
     PDF: [0]
   });
+
+  // My Task Planning State (Regular Department Users)
+  const [myTask, setMyTask] = useState({
+    estimatedEffortHours: '',
+    taskStartDate: new Date().toISOString().split('T')[0],
+    taskTargetCompletionDate: ''
+  });
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [taskModalDraft, setTaskModalDraft] = useState({
+    estimatedEffortHours: '',
+    taskStartDate: new Date().toISOString().split('T')[0],
+    taskTargetCompletionDate: ''
+  });
+  const [taskModalError, setTaskModalError] = useState('');
 
   const handleAddDocRevision = (docType) => {
     setDocRevisions(prev => {
@@ -463,6 +483,12 @@ export default function NewJobForm() {
             value
           });
         }
+        if (myTask.estimatedEffortHours) {
+          await api.patch(`/jobs/${selectedJobId}/workflow/my-task`, {
+            estimatedEffort: Number(myTask.estimatedEffortHours),
+            targetedDate: myTask.taskTargetCompletionDate
+          });
+        }
       } else {
         const targetDepartment = primaryDept === 'admin' ? 'marketing' : primaryDept;
         const allDepartmentsData = buildDepartmentPayload(deptFields, targetDepartment, true);
@@ -470,7 +496,8 @@ export default function NewJobForm() {
           ...core,
           date: new Date().toISOString().split('T')[0],
           targetDepartment,
-          allDepartmentsData
+          allDepartmentsData,
+          myTask: myTask.estimatedEffortHours ? myTask : undefined
         });
         savedJobId = res.data?.id || res.data?.external_id;
       }
@@ -487,8 +514,10 @@ export default function NewJobForm() {
           notes: 'Submitted for Planning from Job Form'
         });
         navigate('/jobs/handover');
-      } else {
+      } else if (selectedJobId) {
         navigate(`/jobs/${savedJobId}`);
+      } else {
+        navigate('/my-jobs');
       }
     } catch (err) {
       console.error(err);
@@ -522,6 +551,19 @@ export default function NewJobForm() {
       setCurrentJob(job);
       setCore(marketingCoreFromJob(job));
       setDeptFields(job.departmentFields || job.fields?.[primaryDept] || {});
+      if (job.fields?.myTask) {
+        setMyTask({
+          estimatedEffortHours: job.fields.myTask.estimatedEffortHours || '',
+          taskStartDate: job.fields.myTask.taskStartDate || new Date().toISOString().split('T')[0],
+          taskTargetCompletionDate: job.fields.myTask.taskTargetCompletionDate || ''
+        });
+      } else {
+        setMyTask({
+          estimatedEffortHours: '',
+          taskStartDate: new Date().toISOString().split('T')[0],
+          taskTargetCompletionDate: ''
+        });
+      }
     }
   };
 
@@ -758,6 +800,113 @@ export default function NewJobForm() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+
+        {/* ⭐ MY TASK SECTION (Directly after Core Job Details & before Department-Specific Sections) */}
+        <div className="bg-white rounded-lg shadow-sm border border-indigo-200/80 overflow-hidden">
+          <div className="px-6 py-4 border-b border-indigo-100 bg-indigo-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs">
+                <CheckSquare size={18} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-indigo-950 flex items-center gap-2 tracking-tight">
+                  My Task
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                    Execution Planning
+                  </span>
+                </h3>
+                <p className="text-xs text-indigo-600/90 mt-0.5">
+                  Plan your work effort and schedule. Task dates are kept strictly separate from project delivery dates.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTaskModalDraft({ ...myTask });
+                setTaskModalError('');
+                setIsTaskModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0"
+            >
+              <CheckSquare size={14} />
+              <span>Open My Task Pop-up</span>
+            </button>
+          </div>
+
+          <div className="p-6">
+            {/* Live Summary Badges */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
+                  <Clock size={14} className="text-indigo-600" />
+                  <span>Estimated Effort (Hours)</span>
+                  <span className="text-rose-500 font-bold">*</span>
+                </div>
+                <div className="text-lg font-black text-slate-900">
+                  {myTask.estimatedEffortHours ? (
+                    <span>{myTask.estimatedEffortHours} <span className="text-xs font-medium text-slate-400">hours</span></span>
+                  ) : (
+                    <span className="text-xs text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Not Set (Click Pop-up)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
+                  <Calendar size={14} className="text-indigo-600" />
+                  <span>Task Start Date</span>
+                  <span className="text-rose-500 font-bold">*</span>
+                </div>
+                <div className="text-lg font-black text-slate-900">
+                  {myTask.taskStartDate ? (
+                    <span>{myTask.taskStartDate}</span>
+                  ) : (
+                    <span className="text-xs text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Not Set
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
+                  <Calendar size={14} className="text-indigo-600" />
+                  <span>Task Target Completion Date</span>
+                  <span className="text-rose-500 font-bold">*</span>
+                </div>
+                <div className="text-lg font-black text-slate-900">
+                  {myTask.taskTargetCompletionDate ? (
+                    <span>{myTask.taskTargetCompletionDate}</span>
+                  ) : (
+                    <span className="text-xs text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Not Set
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Helper Notice & Quick Action */}
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 bg-indigo-50/40 p-3 rounded-xl border border-indigo-100">
+              <span>Configured task details will be automatically linked and available under <strong>My Tasks</strong> upon saving.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setTaskModalDraft({ ...myTask });
+                  setTaskModalError('');
+                  setIsTaskModalOpen(true);
+                }}
+                className="text-indigo-700 hover:text-indigo-900 font-bold underline shrink-0"
+              >
+                Configure in Pop-up →
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1308,6 +1457,128 @@ export default function NewJobForm() {
             setCurrentJob(updatedJob);
           }}
         />
+      )}
+
+      {/* ⭐ MY TASK POP-UP MODAL (Contains ONLY 3 required task fields) */}
+      {isTaskModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-indigo-600 text-white">
+                  <CheckSquare size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">
+                    My Task Planning
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Configure effort and timeline for your own task execution
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTaskModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body: ONLY 3 Required Fields */}
+            <div className="p-6 space-y-4">
+              {taskModalError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold">
+                  {taskModalError}
+                </div>
+              )}
+
+              {/* 1. Estimated Effort (Hours) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Estimated Effort (Hours) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0.1"
+                  placeholder="e.g. 16.0"
+                  value={taskModalDraft.estimatedEffortHours}
+                  onChange={(e) => setTaskModalDraft(prev => ({ ...prev, estimatedEffortHours: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">Planned total working hours for this task</span>
+              </div>
+
+              {/* 2. Task Start Date */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Task Start Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={taskModalDraft.taskStartDate}
+                  onChange={(e) => setTaskModalDraft(prev => ({ ...prev, taskStartDate: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              {/* 3. Task Target Completion Date */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Task Target Completion Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={taskModalDraft.taskTargetCompletionDate}
+                  onChange={(e) => setTaskModalDraft(prev => ({ ...prev, taskTargetCompletionDate: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">Kept strictly separate from project delivery date</span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsTaskModalOpen(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const est = parseFloat(taskModalDraft.estimatedEffortHours);
+                  if (isNaN(est) || est <= 0) {
+                    setTaskModalError('Estimated effort (hours) is required and must be greater than 0.');
+                    return;
+                  }
+                  if (!taskModalDraft.taskStartDate) {
+                    setTaskModalError('Task Start Date is required.');
+                    return;
+                  }
+                  if (!taskModalDraft.taskTargetCompletionDate) {
+                    setTaskModalError('Task Target Completion Date is required.');
+                    return;
+                  }
+                  if (taskModalDraft.taskTargetCompletionDate < taskModalDraft.taskStartDate) {
+                    setTaskModalError('Task Target Completion Date cannot be earlier than Task Start Date.');
+                    return;
+                  }
+                  setMyTask({ ...taskModalDraft });
+                  setIsTaskModalOpen(false);
+                }}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs"
+              >
+                Save Task Info
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -112,6 +112,13 @@ class Job(Base):
     forwarding_note = Column(Text, nullable=True)
     stage_durations = Column(JSONB, default=dict)
 
+    # Normalized Workflow Engine Columns
+    current_department = Column(String(50), default="marketing", index=True)
+    assigned_user_id = Column(Integer, nullable=True)
+    assigned_user_name = Column(String(255), default="")
+    current_workflow_status = Column(String(50), default="In Progress", index=True)
+    expected_date = Column(Date, nullable=True)
+
     # JSONB columns
     fields = Column(JSONB, default=dict)
     engineers = Column(JSONB, default=dict)
@@ -164,6 +171,10 @@ class JobHandover(Base):
     status_at_handover = Column(String(50), nullable=True)
     progress_at_handover = Column(Numeric(5, 2), nullable=True)
     performed_by = Column(String(100), nullable=False)
+    target_assigned_user_id = Column(Integer, nullable=True)
+    target_assigned_user_name = Column(String(255), default="")
+    responsible_engg_name = Column(String(255), default="")
+    is_current_pending = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class JobProgressHistory(Base):
@@ -321,6 +332,35 @@ class MarketingTask(Base):
     is_mandatory_for_readiness = Column(Boolean, default=False)
     readiness_criterion_key = Column(String(100), nullable=True)
     attachments = Column(JSONB, default=list)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class DepartmentTask(Base):
+    __tablename__ = "department_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    department = Column(String(50), nullable=False, index=True)
+    task_name = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+
+    assigned_user_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    assigned_user_name = Column(String(255), nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    created_by_name = Column(String(255), nullable=False)
+
+    start_date = Column(Date, nullable=False, default=func.current_date())
+    target_date = Column(Date, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    estimated_effort_hours = Column(Numeric(6, 2), default=0.00)
+    actual_effort_hours = Column(Numeric(6, 2), default=0.00)
+    progress_percentage = Column(Integer, default=0)
+
+    status = Column(String(50), default="In Progress", nullable=False)
+    blocked_reason = Column(Text, default="")
+    completion_remarks = Column(Text, default="")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

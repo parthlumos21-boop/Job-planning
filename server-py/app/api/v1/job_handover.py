@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFi
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm.attributes import flag_modified
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from app.db.session import get_db
-from app.api.deps import get_current_user, is_admin_or_keval
-from app.models import Job, JobHandover, DepartmentActivity, User, Account, JobAssignmentHistory, JobExecutionSession
+from app.api.deps import get_current_user, is_admin_or_keval, require_admin, require_keval
+from app.models import Job, JobHandover, DepartmentActivity, User, Account, JobAssignmentHistory, JobExecutionSession, DepartmentTask
 from app.schemas import UserPayload
 from app.core.events import broadcaster
 from app.api.v1.jobs import format_job_row
@@ -407,7 +407,7 @@ async def get_job_handover_history(
         .order_by(desc(JobHandover.handover_at), desc(JobHandover.id))
     )
     res = await db.execute(stmt)
-    records = res.scalars().all()
+    records: list[Any] = list(res.scalars().all())
 
     # Also fetch activities for full chronological context
     act_stmt = (
@@ -416,7 +416,7 @@ async def get_job_handover_history(
         .order_by(desc(DepartmentActivity.created_at))
     )
     act_res = await db.execute(act_stmt)
-    activities = act_res.scalars().all()
+    activities: list[Any] = list(act_res.scalars().all())
 
     history = []
     for r in records:
@@ -553,9 +553,10 @@ async def upload_job_attachment(
         "uploadedAt": datetime.now(timezone.utc).isoformat()
     }
 
-    current_attachments = list(job.attachments or [])
+    raw_attachments = getattr(job, "attachments", None)
+    current_attachments = list(raw_attachments) if isinstance(raw_attachments, list) else []
     current_attachments.append(attachment_record)
-    job.attachments = current_attachments
+    setattr(job, "attachments", current_attachments)
     flag_modified(job, "attachments")
 
     await db.commit()
@@ -564,7 +565,7 @@ async def upload_job_attachment(
     return {
         "success": True,
         "attachment": attachment_record,
-        "attachments": job.attachments
+        "attachments": getattr(job, "attachments", current_attachments)
     }
 
 # -------------------------------------------------------------
@@ -593,7 +594,7 @@ def resolve_job_stage(j: Job) -> str:
         return "RELEASED"
     return "INCOMING"
 
-def compute_planning_readiness(j: Job, mkt_tasks: list = None) -> dict:
+def compute_planning_readiness(j: Job, mkt_tasks: list | None = None) -> dict:
     checklist = getattr(j, "handover_checklist", {}) or {}
     fields = getattr(j, "fields", {}) or {}
     attachments = getattr(j, "attachments", None) or []
@@ -650,7 +651,7 @@ async def get_control_center_summary(
 ):
     all_jobs_stmt = select(Job)
     res = await db.execute(all_jobs_stmt)
-    all_jobs = res.scalars().all()
+    all_jobs: list[Any] = list(res.scalars().all())
 
     now = datetime.now(timezone.utc)
     user_name_lower = (getattr(user, "name", None) or getattr(user, "username", "") or "").lower()
@@ -1164,9 +1165,7 @@ async def request_job_clarification(
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(get_current_user)
 ):
-    stmt = select(Job).where(or_(Job.external_id == id, Job.id == id))
-    res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job = await find_job_by_id(db, id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -1221,9 +1220,7 @@ async def submit_job_correction(
     db: AsyncSession = Depends(get_db),
     user: UserPayload = Depends(get_current_user)
 ):
-    stmt = select(Job).where(or_(Job.external_id == id, Job.id == id))
-    res = await db.execute(stmt)
-    job = res.scalar_one_or_none()
+    job = await find_job_by_id(db, id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -1233,11 +1230,12 @@ async def submit_job_correction(
     if not correction_summary:
         raise HTTPException(status_code=400, detail="Correction summary is required")
 
+    now = datetime.now(timezone.utc)
     job.current_stage = "VERIFICATION"
     job.handover_status = "Submitted for Planning"
     job.current_action = "Review submitted corrections and verify inputs"
     job.current_waiting_reason = ""
-    job.stage_started_at = func.now()
+    job.stage_started_at = now
 
     activity = DepartmentActivity(
         job_id=job.external_id,
@@ -1305,7 +1303,8 @@ async def start_planning_work(
         JobExecutionSession.ended_at.is_(None)
     )
     c_res = await db.execute(c_stmt)
-    for cs in c_res.scalars().all():
+    open_sessions: list[Any] = list(c_res.scalars().all())
+    for cs in open_sessions:
         cs.ended_at = now
         cs.duration_seconds = max(0, int((now - cs.started_at).total_seconds()))
         job.actual_duration_seconds = (job.actual_duration_seconds or 0) + cs.duration_seconds
@@ -1382,7 +1381,8 @@ async def complete_planning_work(
     )
     c_res = await db.execute(c_stmt)
     total_closed_dur = 0
-    for cs in c_res.scalars().all():
+    open_sessions: list[Any] = list(c_res.scalars().all())
+    for cs in open_sessions:
         cs.ended_at = now
         cs.duration_seconds = max(0, int((now - cs.started_at).total_seconds()))
         total_closed_dur += cs.duration_seconds
@@ -1451,7 +1451,8 @@ async def release_to_next_department(
         JobExecutionSession.ended_at.is_(None)
     )
     c_res = await db.execute(c_stmt)
-    for cs in c_res.scalars().all():
+    open_sessions: list[Any] = list(c_res.scalars().all())
+    for cs in open_sessions:
         cs.ended_at = now
         cs.duration_seconds = max(0, int((now - cs.started_at).total_seconds()))
         job.actual_duration_seconds = (job.actual_duration_seconds or 0) + cs.duration_seconds
@@ -1547,11 +1548,11 @@ async def get_control_center_timeline(
     job_ids = [job.id, job.external_id]
     handovers_stmt = select(JobHandover).where(JobHandover.job_id.in_(job_ids)).order_by(desc(JobHandover.handover_at), desc(JobHandover.id))
     h_res = await db.execute(handovers_stmt)
-    records = h_res.scalars().all()
+    records: list[Any] = list(h_res.scalars().all())
 
     acts_stmt = select(DepartmentActivity).where(DepartmentActivity.job_id.in_(job_ids)).order_by(desc(DepartmentActivity.created_at))
     a_res = await db.execute(acts_stmt)
-    activities = a_res.scalars().all()
+    activities: list[Any] = list(a_res.scalars().all())
 
     events = []
     seen_keys = set()
@@ -1629,7 +1630,7 @@ async def get_all_department_activities(
     search: str | None = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    user: UserPayload = Depends(get_current_user)
+    user: UserPayload = Depends(require_keval)
 ):
     stmt = (
         select(DepartmentActivity, Job)
@@ -1699,7 +1700,7 @@ async def get_all_job_assignments(
     search: str | None = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    user: UserPayload = Depends(get_current_user)
+    user: UserPayload = Depends(require_keval)
 ):
     stmt = (
         select(JobAssignmentHistory, Job)
@@ -1775,7 +1776,7 @@ async def get_planning_users_workload(
     combined_candidates = []
 
     for u in users:
-        c_name = (u.name or u.username or "").strip()
+        c_name = (u.name or "").strip()
         if not c_name:
             continue
         seen_names.add(c_name.lower())
@@ -1850,4 +1851,786 @@ async def get_planning_users_workload(
     return {
         "users": workload,
         "total": len(workload)
+    }
+
+# =============================================================
+# UNIFIED DEPARTMENT WORKFLOW ENGINE
+# =============================================================
+
+def normalize_dept_key(d: str | None) -> str:
+    s = (d or "").strip().lower()
+    if "market" in s:
+        return "marketing"
+    elif "mech" in s:
+        return "mechanical"
+    elif "elect" in s or "design" in s:
+        return "design"
+    elif "proc" in s or "purch" in s:
+        return "purchase"
+    elif "prod" in s or "qc" in s or "disp" in s:
+        return "production"
+    return s or "marketing"
+
+def dept_matches(dept1: str | None, dept2: str | None) -> bool:
+    if not dept1 or not dept2:
+        return False
+    return normalize_dept_key(dept1) == normalize_dept_key(dept2)
+
+def user_in_department(user_depts: list[str], dept: str, is_admin: bool = False) -> bool:
+    if is_admin:
+        return True
+    return any(dept_matches(ud, dept) for ud in user_depts)
+
+DEFAULT_DEPARTMENT_TASKS = {
+    "marketing": "Prepare Job for Design",
+    "design": "Design Review & Preparation",
+    "mechanical": "Mechanical Layout & GA Drawing",
+    "purchase": "Bill of Materials & PO Sourcing",
+    "production": "Panel Assembly & Quality Testing",
+    "qc": "Quality Control & Testing Clearance",
+    "dispatch": "Final Packaging & Dispatch Clearance"
+}
+
+STANDARD_NEXT_DEPARTMENTS = {
+    "marketing": "design",
+    "design": "purchase",
+    "mechanical": "purchase",
+    "purchase": "production",
+    "production": "dispatch"
+}
+
+# GET /api/jobs/{id}/workflow-state
+@router.get("/{id}/workflow-state")
+async def get_job_workflow_state(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    user_depts = [d.lower() for d in (user.departments or [])]
+    user_primary_dept = user_depts[0] if user_depts else "marketing"
+    is_admin = is_admin_or_keval(user)
+
+    curr_dept = (job.current_department or "marketing").lower()
+    curr_dept_norm = normalize_dept_key(curr_dept)
+    curr_status = job.current_workflow_status or "In Progress"
+
+    # Fetch active department task for current department on this job
+    t_stmt = select(DepartmentTask).where(
+        DepartmentTask.job_id == job.id,
+        or_(
+            DepartmentTask.department == curr_dept,
+            DepartmentTask.department == curr_dept_norm
+        )
+    ).order_by(desc(DepartmentTask.id))
+    t_res = await db.execute(t_stmt)
+    active_task: Any = t_res.scalars().first()
+
+    # If no task exists yet and current department is marketing, auto-seed the initial Marketing task
+    if not active_task and curr_dept_norm == "marketing":
+        now_d = date.today()
+        active_task = DepartmentTask(
+            job_id=job.id,
+            department="marketing",
+            task_name=DEFAULT_DEPARTMENT_TASKS.get("marketing", "Prepare Job for Design"),
+            assigned_user_id=getattr(user, "id", None),
+            assigned_user_name=job.assigned_user_name or getattr(user, "name", None) or getattr(user, "username", "Marketing User"),
+            created_by_user_id=getattr(user, "id", None),
+            created_by_name=getattr(user, "name", None) or getattr(user, "username", "System"),
+            start_date=now_d,
+            target_date=now_d + timedelta(days=5),
+            estimated_effort_hours=4.00,
+            actual_effort_hours=0.00,
+            progress_percentage=0,
+            status="In Progress"
+        )
+        db.add(active_task)
+        await db.commit()
+        await db.refresh(active_task)
+
+    # Calculate readiness check
+    readiness = compute_planning_readiness(job)
+
+    # Fetch pending incoming handover record if job is pending acceptance
+    h_stmt = select(JobHandover).where(
+        JobHandover.job_id.in_([job.id, job.external_id]),
+        JobHandover.is_current_pending.is_(True)
+    ).order_by(desc(JobHandover.id))
+    h_res = await db.execute(h_stmt)
+    pending_handover: Any = h_res.scalars().first()
+
+    # Determine primary action
+    user_belongs_to_curr_dept = user_in_department(user_depts, curr_dept, is_admin)
+    primary_action = "VIEW"
+    if curr_status == "Pending Acceptance":
+        if user_belongs_to_curr_dept:
+            primary_action = "ACCEPT_JOB"
+        else:
+            primary_action = "WAITING_ACCEPTANCE"
+    elif curr_status == "In Progress":
+        task_completed = active_task and active_task.status.lower() == "completed"
+        is_ready = bool(readiness.get("isFullyReady", False))
+        if task_completed and is_ready:
+            primary_action = "HANDOVER"
+        else:
+            primary_action = "UPDATE_TASK"
+    elif curr_status == "Needs Clarification":
+        primary_action = "CORRECT_AND_RESUBMIT"
+
+    # Fetch recent history (activities & handovers)
+    act_stmt = select(DepartmentActivity).where(
+        DepartmentActivity.job_id.in_([job.id, job.external_id])
+    ).order_by(desc(DepartmentActivity.created_at)).limit(10)
+    act_res = await db.execute(act_stmt)
+    activities: list[Any] = list(act_res.scalars().all())
+
+    history_items = []
+    for a in activities:
+        history_items.append({
+            "id": a.id,
+            "action": a.action,
+            "department": a.department,
+            "performedBy": a.updated_by,
+            "timestamp": a.created_at.isoformat() if getattr(a, "created_at", None) else None,
+            "details": a.new_value
+        })
+
+    # Prepare response payload
+    return {
+        "jobInfo": {
+            "id": job.id,
+            "externalId": job.external_id,
+            "jobNo": job.job_no,
+            "customer": job.client_name or "",
+            "project": job.project_name or "",
+            "panelName": job.panel_name or "",
+            "quantity": job.qty or "1",
+            "currentDepartment": curr_dept,
+            "responsibleEngineer": job.responsible_engg_name or "",
+            "originalDate": job.date or "",
+            "expectedDate": job.expected_date.isoformat() if getattr(job, "expected_date", None) else getattr(job, "delivery_date", None)
+        },
+        "ownership": {
+            "department": curr_dept,
+            "responsibleEngineer": job.responsible_engg_name or "",
+            "assignedUser": job.assigned_user_name or (active_task.assigned_user_name if active_task else ""),
+            "assignedUserId": job.assigned_user_id,
+            "currentStatus": curr_status
+        },
+        "myTask": {
+            "id": active_task.id if active_task else None,
+            "taskName": active_task.task_name if active_task else "",
+            "department": active_task.department if active_task else curr_dept,
+            "assignedUser": active_task.assigned_user_name if active_task else "",
+            "startDate": active_task.start_date.isoformat() if active_task and active_task.start_date else None,
+            "targetedDate": active_task.target_date.isoformat() if active_task and active_task.target_date else None,
+            "estimatedEffort": float(active_task.estimated_effort_hours or 0) if active_task else 0,
+            "actualEffort": float(active_task.actual_effort_hours or 0) if active_task else 0,
+            "progress": int(active_task.progress_percentage or 0) if active_task else 0,
+            "status": active_task.status if active_task else "In Progress",
+            "completedDate": active_task.completed_at.isoformat() if active_task and active_task.completed_at else None,
+            "completionRemarks": active_task.completion_remarks if active_task else ""
+        } if active_task else None,
+        "readiness": readiness,
+        "primaryAction": {
+            "type": primary_action,
+            "action": primary_action,
+            "canAccept": bool(curr_status == "Pending Acceptance" and user_belongs_to_curr_dept),
+            "canReturn": bool(curr_status == "Pending Acceptance" and user_belongs_to_curr_dept),
+            "canHandover": bool(curr_status == "In Progress" and active_task and active_task.status.lower() == "completed" and bool(readiness.get("isFullyReady", False))),
+            "isCallerDept": user_belongs_to_curr_dept
+        },
+        "incomingHandover": {
+            "id": pending_handover.id,
+            "fromDepartment": pending_handover.from_department,
+            "toDepartment": pending_handover.to_department,
+            "handedOverBy": pending_handover.performed_by,
+            "handedOverAt": pending_handover.handover_at.isoformat() if getattr(pending_handover, "handover_at", None) else None,
+            "responsibleEngineer": pending_handover.responsible_engg_name,
+            "handoverNote": pending_handover.notes or ""
+        } if pending_handover else None,
+        "history": history_items
+    }
+
+# POST /api/jobs/{id}/workflow/accept
+@router.post("/{id}/workflow/accept")
+async def accept_job_workflow(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    now = datetime.now(timezone.utc)
+    user_name = user.name or user.username
+    target_dept = (job.current_department or "design").lower()
+    target_dept_norm = normalize_dept_key(target_dept)
+
+    # Find open pending handover for this job
+    h_stmt = select(JobHandover).where(
+        JobHandover.job_id.in_([job.id, job.external_id]),
+        JobHandover.is_current_pending.is_(True)
+    ).order_by(desc(JobHandover.id))
+    h_res = await db.execute(h_stmt)
+    pending_handover: Any = h_res.scalars().first()
+
+    if pending_handover:
+        pending_handover.is_current_pending = False
+        pending_handover.status_at_handover = "Accepted"
+        setattr(pending_handover, "accepted_by", user_name)
+        setattr(pending_handover, "accepted_at", now)
+
+    job.current_workflow_status = "In Progress"
+    job.assigned_user_id = user.id
+    job.assigned_user_name = user_name
+    job.current_stage = "PLANNING_ACTIVE"
+    job.current_action = f"Working on {target_dept.capitalize()} stage"
+
+    # Rule 3: Acceptance automatically creates the next department's My Task
+    # Rule 8: Never create duplicate active tasks for the same department and job
+    existing_t_stmt = select(DepartmentTask).where(
+        DepartmentTask.job_id == job.id,
+        or_(
+            DepartmentTask.department == target_dept,
+            DepartmentTask.department == target_dept_norm
+        ),
+        DepartmentTask.status == "In Progress"
+    )
+    ex_res = await db.execute(existing_t_stmt)
+    existing_task = ex_res.scalars().first()
+
+    if not existing_task:
+        target_task_name = body.get("taskName") or DEFAULT_DEPARTMENT_TASKS.get(target_dept_norm, f"{target_dept.capitalize()} Review & Preparation")
+        target_days = int(body.get("targetDays") or 5)
+        new_task = DepartmentTask(
+            job_id=job.id,
+            department=target_dept_norm,
+            task_name=target_task_name,
+            assigned_user_id=user.id,
+            assigned_user_name=user_name,
+            created_by_user_id=user.id,
+            created_by_name=user_name,
+            start_date=date.today(),
+            target_date=date.today() + timedelta(days=target_days),
+            estimated_effort_hours=float(body.get("estimatedEffort") or 4.0),
+            actual_effort_hours=0.0,
+            progress_percentage=0,
+            status="In Progress"
+        )
+        db.add(new_task)
+
+    # Record audit activity
+    activity = DepartmentActivity(
+        job_id=job.id,
+        department=target_dept,
+        action="JOB_ACCEPTED",
+        old_value={"status": "Pending Acceptance"},
+        new_value={"status": "In Progress", "accepted_by": user_name, "department": target_dept},
+        updated_by=user_name
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(job)
+
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+        "event": "JOB_ACCEPTED",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "department": target_dept,
+        "acceptedBy": user_name
+    })
+
+    return {"success": True, "message": f"Job accepted by {user_name} for {target_dept.capitalize()}"}
+
+# POST /api/jobs/{id}/workflow/return
+@router.post("/{id}/workflow/return")
+async def return_job_for_clarification(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    reason_cat = body.get("reasonCategory", "Missing Technical Information")
+    remarks = (body.get("remarks") or body.get("details") or "").strip()
+    if not remarks:
+        raise HTTPException(status_code=400, detail="Clarification remarks are required")
+
+    user_name = user.name or user.username
+    curr_dept = job.current_department or "design"
+
+    # Find pending handover to resolve sender department
+    h_stmt = select(JobHandover).where(
+        JobHandover.job_id.in_([job.id, job.external_id]),
+        JobHandover.is_current_pending.is_(True)
+    ).order_by(desc(JobHandover.id))
+    h_res = await db.execute(h_stmt)
+    pending_handover: Any = h_res.scalars().first()
+
+    return_to_dept = pending_handover.from_department if pending_handover and pending_handover.from_department else "marketing"
+
+    if pending_handover:
+        pending_handover.is_current_pending = False
+        pending_handover.status_at_handover = "Returned for Clarification"
+        pending_handover.notes = f"[{reason_cat}] {remarks}"
+
+    job.current_department = return_to_dept
+    job.current_workflow_status = "Needs Clarification"
+    job.handover_status = "Returned for Correction"
+    job.handover_return_reason = f"[{reason_cat}] {remarks}"
+    job.current_action = f"Clarification requested by {curr_dept.capitalize()}: {reason_cat}"
+
+    activity = DepartmentActivity(
+        job_id=job.id,
+        department=curr_dept,
+        action="RETURNED_FOR_CLARIFICATION",
+        old_value={"department": curr_dept, "status": "Pending Acceptance"},
+        new_value={"return_to": return_to_dept, "reason": reason_cat, "remarks": remarks, "returned_by": user_name},
+        updated_by=user_name
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(job)
+
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+        "event": "CLARIFICATION_REQUESTED",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "returnedTo": return_to_dept,
+        "reason": reason_cat
+    })
+
+    return {"success": True, "message": f"Job returned to {return_to_dept.capitalize()} for clarification"}
+
+# PATCH /api/jobs/{id}/workflow/my-task
+@router.patch("/{id}/workflow/my-task")
+async def update_department_my_task(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    task_id = body.get("taskId")
+
+    task = None
+    if task_id:
+        t_stmt = select(DepartmentTask).where(DepartmentTask.id == task_id)
+        t_res = await db.execute(t_stmt)
+        task = t_res.scalar_one_or_none()
+
+    curr_dept = (job.current_department or (user.departments[0] if user.departments else "marketing")).lower()
+
+    if not task:
+        # Find latest task for current department
+        t_stmt = select(DepartmentTask).where(
+            DepartmentTask.job_id == job.id,
+            DepartmentTask.department == curr_dept
+        ).order_by(desc(DepartmentTask.id))
+        t_res = await db.execute(t_stmt)
+        task = t_res.scalars().first()
+
+    # If no task exists yet, automatically create one so progress tracking never breaks
+    now = datetime.now(timezone.utc)
+    if not task:
+        s_date = now.date()
+        t_date = s_date
+        if body.get("targetedDate"):
+            try:
+                t_date = datetime.strptime(body["targetedDate"][:10], "%Y-%m-%d").date()
+            except Exception:
+                pass
+
+        task = DepartmentTask(
+            job_id=job.id,
+            department=curr_dept,
+            task_name=f"{curr_dept.title()} Engineering Task",
+            description=f"Task for Job #{job.job_no}",
+            assigned_user_id=user.id,
+            assigned_user_name=user.name or user.username,
+            created_by_user_id=user.id,
+            created_by_name=user.name or user.username,
+            start_date=s_date,
+            target_date=t_date,
+            estimated_effort_hours=max(0.0, float(body.get("estimatedEffort", 0.0))),
+            actual_effort_hours=0.0,
+            progress_percentage=0,
+            status="In Progress"
+        )
+        db.add(task)
+        await db.flush()
+
+    t_item: Any = task
+    old_progress = t_item.progress_percentage
+    old_actual = float(t_item.actual_effort_hours or 0.0)
+
+    # Validations
+    if "progress" in body:
+        val_prog = int(body["progress"])
+        if val_prog < 0 or val_prog > 100:
+            raise HTTPException(status_code=400, detail="Progress percentage must be between 0 and 100")
+        t_item.progress_percentage = val_prog
+
+    # Actual effort: either direct override or session hours accumulation
+    session_hours = 0.0
+    if "sessionHours" in body:
+        try:
+            session_hours = float(body["sessionHours"])
+        except Exception:
+            session_hours = 0.0
+        if session_hours < 0:
+            raise HTTPException(status_code=400, detail="Session hours cannot be negative")
+        if session_hours > 0:
+            t_item.actual_effort_hours = old_actual + session_hours
+            # Create a JobExecutionSession
+            work_session = JobExecutionSession(
+                job_id=job.id,
+                session_type="WORK",
+                started_at=now - timedelta(hours=session_hours),
+                ended_at=now,
+                duration_seconds=int(session_hours * 3600),
+                performed_by=user.name or user.username,
+                notes=str(body.get("completionRemarks") or "Work session completed").strip()
+            )
+            db.add(work_session)
+    elif "actualEffort" in body:
+        try:
+            act_val = float(body["actualEffort"])
+        except Exception:
+            act_val = 0.0
+        if act_val < 0:
+            raise HTTPException(status_code=400, detail="Actual effort hours cannot be negative")
+        t_item.actual_effort_hours = act_val
+
+    if "estimatedEffort" in body and body["estimatedEffort"] is not None:
+        try:
+            est_val = float(body["estimatedEffort"])
+            if est_val >= 0:
+                t_item.estimated_effort_hours = est_val
+        except Exception:
+            pass
+
+    if "completionRemarks" in body:
+        t_item.completion_remarks = str(body["completionRemarks"]).strip()
+
+    if "targetedDate" in body and body["targetedDate"]:
+        try:
+            t_item.target_date = datetime.strptime(body["targetedDate"][:10], "%Y-%m-%d").date()
+        except Exception:
+            pass
+
+    # Status handling
+    new_status = body.get("status")
+    if new_status:
+        t_item.status = new_status
+        if new_status == "Blocked":
+            b_reason = str(body.get("blockedReason") or body.get("completionRemarks") or "").strip()
+            if not b_reason:
+                raise HTTPException(status_code=400, detail="A blocker or delay reason is required when marking a task Blocked")
+            t_item.blocked_reason = b_reason
+
+    if t_item.status == "Completed" or (t_item.progress_percentage or 0) >= 100:
+        t_item.status = "Completed"
+        t_item.completed_at = now
+        t_item.progress_percentage = 100
+
+    # Audit Trail Entry
+    act = DepartmentActivity(
+        job_id=job.id,
+        department=t_item.department,
+        action="TASK_PROGRESS_UPDATED",
+        old_value={"progress": old_progress, "actual_hours": old_actual},
+        new_value={
+            "progress": t_item.progress_percentage,
+            "status": t_item.status,
+            "actual_hours": float(t_item.actual_effort_hours or 0.0),
+            "session_hours": session_hours,
+            "remarks": t_item.completion_remarks,
+            "blocked_reason": t_item.blocked_reason or ""
+        },
+        updated_by=user.username
+    )
+    db.add(act)
+
+    await db.commit()
+    await db.refresh(t_item)
+
+    return {"success": True, "message": "My Task updated successfully", "task": {
+        "id": t_item.id,
+        "progress": t_item.progress_percentage,
+        "status": t_item.status,
+        "actualEffort": float(t_item.actual_effort_hours or 0),
+        "estimatedEffort": float(t_item.estimated_effort_hours or 0),
+        "completedAt": t_item.completed_at.isoformat() if t_item.completed_at else None
+    }}
+
+# POST /api/jobs/{id}/workflow/direct-assign
+@router.post("/{id}/workflow/direct-assign")
+async def direct_assign_department_task(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    assigned_user_id = body.get("assignedUserId")
+    assigned_user_name = (body.get("assignedUserName") or "").strip()
+    task_name = (body.get("taskName") or "").strip()
+    estimated_effort = float(body.get("estimatedEffort") or 4.0)
+
+    if not assigned_user_name:
+        raise HTTPException(status_code=400, detail="Assigned user name is required")
+
+    curr_dept = job.current_department or "marketing"
+    job.assigned_user_id = assigned_user_id
+    job.assigned_user_name = assigned_user_name
+
+    # Check for open task in this department
+    t_stmt = select(DepartmentTask).where(
+        DepartmentTask.job_id == job.id,
+        DepartmentTask.department == curr_dept,
+        DepartmentTask.status == "In Progress"
+    ).order_by(desc(DepartmentTask.id))
+    t_res = await db.execute(t_stmt)
+    task: Any = t_res.scalars().first()
+
+    now_d = date.today()
+    if task:
+        task.assigned_user_id = assigned_user_id
+        task.assigned_user_name = assigned_user_name
+        if task_name:
+            task.task_name = task_name
+        if "targetDate" in body and body["targetDate"]:
+            try:
+                task.target_date = datetime.strptime(body["targetDate"][:10], "%Y-%m-%d").date()
+            except Exception:
+                pass
+    else:
+        task = DepartmentTask(
+            job_id=job.id,
+            department=curr_dept,
+            task_name=task_name or DEFAULT_DEPARTMENT_TASKS.get(curr_dept, "Department Execution Task"),
+            assigned_user_id=assigned_user_id,
+            assigned_user_name=assigned_user_name,
+            created_by_user_id=user.id,
+            created_by_name=user.name or user.username,
+            start_date=now_d,
+            target_date=now_d + timedelta(days=5),
+            estimated_effort_hours=estimated_effort,
+            actual_effort_hours=0.0,
+            progress_percentage=0,
+            status="In Progress"
+        )
+        db.add(task)
+
+    activity = DepartmentActivity(
+        job_id=job.id,
+        department=curr_dept,
+        action="TASK_DIRECT_ASSIGNED",
+        old_value={"assigned_user": job.assigned_user_name},
+        new_value={"assigned_to": assigned_user_name, "task_name": task.task_name},
+        updated_by=user.name or user.username
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(job)
+
+    return {"success": True, "message": f"Task directly assigned to {assigned_user_name}"}
+
+# GET /api/jobs/department-tasks/my-tasks
+@router.get("/department-tasks/my-tasks")
+async def get_department_my_tasks(
+    department: str | None = Query(None),
+    status: str | None = Query(None),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    user_depts = [d.lower() for d in (user.departments or [])]
+    is_admin = is_admin_or_keval(user)
+
+    # Scoping: if regular user, restrict strictly to their own department
+    allowed_dept = None
+    if not is_admin:
+        allowed_dept = user_depts[0] if user_depts else "marketing"
+    else:
+        allowed_dept = department.lower() if department else None
+
+    stmt = select(DepartmentTask, Job).join(Job, DepartmentTask.job_id == Job.id)
+
+    if allowed_dept:
+        allowed_dept_norm = normalize_dept_key(allowed_dept)
+        stmt = stmt.where(
+            or_(
+                DepartmentTask.department == allowed_dept,
+                DepartmentTask.department == allowed_dept_norm,
+                func.lower(DepartmentTask.department).like(f"%{allowed_dept_norm}%")
+            )
+        )
+
+    if status and status.lower() != "all":
+        stmt = stmt.where(DepartmentTask.status == status)
+
+    if search:
+        s_pat = f"%{search.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Job.job_no).like(s_pat),
+                func.lower(Job.client_name).like(s_pat),
+                func.lower(Job.panel_name).like(s_pat),
+                func.lower(DepartmentTask.task_name).like(s_pat),
+                func.lower(DepartmentTask.assigned_user_name).like(s_pat)
+            )
+        )
+
+    stmt = stmt.order_by(desc(DepartmentTask.id))
+    res = await db.execute(stmt)
+    records: list[Any] = list(res.all())
+
+    tasks = []
+    for t, j in records:
+        tasks.append({
+            "id": t.id,
+            "jobId": j.id,
+            "externalId": j.external_id,
+            "jobNo": j.job_no,
+            "clientName": j.client_name or "",
+            "panelName": j.panel_name or "",
+            "projectName": j.project_name or "",
+            "taskName": t.task_name,
+            "department": t.department,
+            "assignedUser": t.assigned_user_name,
+            "startDate": t.start_date.isoformat() if t.start_date else None,
+            "targetDate": t.target_date.isoformat() if t.target_date else None,
+            "estimatedEffort": float(t.estimated_effort_hours or 0),
+            "actualEffort": float(t.actual_effort_hours or 0),
+            "progress": int(t.progress_percentage or 0),
+            "status": t.status,
+            "completedAt": t.completed_at.isoformat() if t.completed_at else None,
+            "completionRemarks": t.completion_remarks or "",
+            "blockedReason": getattr(t, "blocked_reason", "") or "",
+            "description": getattr(t, "description", "") or "",
+            "remainingEffort": max(0.0, float(t.estimated_effort_hours or 0) - float(t.actual_effort_hours or 0)),
+            "responsibleEngineer": j.responsible_engg_name or ""
+        })
+
+    return {"tasks": tasks, "total": len(tasks), "department": allowed_dept or "all"}
+
+# POST /api/jobs/{id}/workflow/handover
+@router.post("/{id}/workflow/handover")
+async def handover_to_next_department(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    target_dept = (body.get("targetDepartment") or "design").lower()
+    resp_engg = (body.get("responsibleEngineer") or job.responsible_engg_name or "").strip()
+    notes = (body.get("notes") or body.get("handoverNote") or "").strip()
+
+    from_dept = (job.current_department or "marketing").lower()
+
+    # Rule 9: Never allow duplicate handovers while a handover is already Pending Acceptance
+    existing_h_stmt = select(JobHandover).where(
+        JobHandover.job_id.in_([job.id, job.external_id]),
+        JobHandover.is_current_pending.is_(True)
+    )
+    ex_h_res = await db.execute(existing_h_stmt)
+    if ex_h_res.scalars().first():
+        raise HTTPException(status_code=400, detail="A handover is already pending acceptance for this job")
+
+    # Mark current active task as Completed
+    t_stmt = select(DepartmentTask).where(
+        DepartmentTask.job_id == job.id,
+        DepartmentTask.department == from_dept,
+        DepartmentTask.status == "In Progress"
+    ).order_by(desc(DepartmentTask.id))
+    t_res = await db.execute(t_stmt)
+    curr_task: Any = t_res.scalars().first()
+    now = datetime.now(timezone.utc)
+    if curr_task:
+        curr_task.status = "Completed"
+        curr_task.completed_at = now
+        curr_task.progress_percentage = 100
+
+    # Rule 1: Handover creates an incoming record for the next department (status = 'Pending Acceptance')
+    handover_record = JobHandover(
+        job_id=job.id,
+        handover_type="DEPARTMENT",
+        from_department=from_dept,
+        to_department=target_dept,
+        performed_by=user.name or user.username,
+        responsible_engg_name=resp_engg,
+        reason=f"Handover from {from_dept.capitalize()} to {target_dept.capitalize()}",
+        notes=notes,
+        is_current_pending=True,
+        status_at_handover="Pending Acceptance"
+    )
+    db.add(handover_record)
+
+    # Update job stage & ownership
+    job.current_department = target_dept
+    job.current_workflow_status = "Pending Acceptance"
+    job.assigned_user_id = None
+    job.assigned_user_name = ""
+    if resp_engg:
+        job.responsible_engg_name = resp_engg
+    job.handover_status = f"Submitted to {target_dept.capitalize()}"
+    job.current_action = f"Waiting for {target_dept.capitalize()} acceptance"
+
+    # Audit log
+    activity = DepartmentActivity(
+        job_id=job.id,
+        department=from_dept,
+        action="HANDOVER_SUBMITTED",
+        old_value={"department": from_dept, "status": "In Progress"},
+        new_value={"to_department": target_dept, "responsible_engg": resp_engg, "notes": notes},
+        updated_by=user.name or user.username
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(job)
+
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+        "event": "HANDOVER_SUBMITTED",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "fromDepartment": from_dept,
+        "toDepartment": target_dept,
+        "responsibleEngineer": resp_engg
+    })
+
+    return {
+        "success": True,
+        "message": f"Job successfully handed over to {target_dept.capitalize()}",
+        "currentDepartment": target_dept,
+        "status": "Pending Acceptance"
     }

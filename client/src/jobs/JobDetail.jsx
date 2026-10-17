@@ -76,6 +76,18 @@ export default function JobDetail() {
   // Default to UserJobDetail for department users; admin can toggle
   const [viewMode, setViewMode] = useState(!isAdmin ? 'user' : 'admin');
 
+  const isStrictMarketingUser = isMarketingUser(user) && !isAdmin;
+  const hasMarketingAccess = isAdmin || user?.departments?.includes('marketing') || isStrictMarketingUser;
+  const hasOtherAccess = !isStrictMarketingUser && (isAdmin || (user?.departments && user.departments.some(d => d !== 'marketing')));
+
+  useEffect(() => {
+    if (viewMode === 'admin') {
+      fetchJob();
+      fetchTimeline();
+    }
+    // eslint-disable-next-line
+  }, [id, viewMode]);
+
   if (viewMode === 'user') {
     return (
       <UserJobDetail
@@ -83,16 +95,6 @@ export default function JobDetail() {
       />
     );
   }
-
-  const isStrictMarketingUser = isMarketingUser(user) && !isAdmin;
-  const hasMarketingAccess = isAdmin || user?.departments?.includes('marketing') || isStrictMarketingUser;
-  const hasOtherAccess = !isStrictMarketingUser && (isAdmin || (user?.departments && user.departments.some(d => d !== 'marketing')));
-
-  useEffect(() => {
-    fetchJob();
-    fetchTimeline();
-    // eslint-disable-next-line
-  }, [id]);
 
   const fetchJob = async () => {
     try {
@@ -123,11 +125,9 @@ export default function JobDetail() {
 
   const handleJobUpdated = (jobId, department, field, value) => {
     setJob(prevJob => {
+      if (!prevJob) return prevJob;
       const isCore = department === 'marketing';
-      if (isCore) {
-        return { ...prevJob, [field]: value };
-      }
-      return {
+      const updated = {
         ...prevJob,
         allDepartmentsData: {
           ...(prevJob.allDepartmentsData || {}),
@@ -144,6 +144,23 @@ export default function JobDetail() {
           }
         }
       };
+
+      if (isCore) {
+        updated[field] = value;
+        if (field === 'Job No.' || field === 'jobNo') updated.jobNo = value;
+        if (field === 'Name of Panel' || field === 'panelName') updated.panelName = value;
+        if (field === 'Customer Name' || field === 'clientName') updated.clientName = value;
+        if (field === 'Responsible Engg. Name' || field === 'responsibleEnggName') updated.responsibleEnggName = value;
+        if (field === 'Project Name' || field === 'projectName') updated.projectName = value;
+        if (field === 'Qty.' || field === 'qty') updated.qty = value;
+        if (field === 'Purchase Order' || field === 'poNo') updated.poNo = value;
+        if (field === 'Purchase Order Date' || field === 'poDate') updated.poDate = value;
+        if (field === 'Type of Industries' || field === 'typeOfIndustries') updated.typeOfIndustries = value;
+        if (field === 'Type of Panel' || field === 'typeOfPanel') updated.typeOfPanel = value;
+        if (field === 'Incomer Rating' || field === 'incomerRating') updated.incomerRating = value;
+      }
+
+      return updated;
     });
   };
 
