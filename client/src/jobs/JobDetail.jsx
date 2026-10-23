@@ -279,10 +279,19 @@ export default function JobDetail() {
 
   if (!job) {
     return (
-      <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
-        <p className="text-slate-500">Job not found.</p>
-        <button onClick={() => navigate('/jobs/handover')} className="mt-4 text-indigo-600 font-bold hover:underline">
-          Return to Planning Control Center
+      <div className="text-center py-16 px-4 bg-white rounded-2xl border border-slate-200 shadow-xs max-w-lg mx-auto my-12">
+        <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+          <AlertTriangle size={24} className="text-slate-500" />
+        </div>
+        <h3 className="text-base font-bold text-slate-800">Job Not Found</h3>
+        <p className="text-xs text-slate-500 mt-1">
+          This job does not exist or has been permanently removed.
+        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+        >
+          Return to Dashboard
         </button>
       </div>
     );

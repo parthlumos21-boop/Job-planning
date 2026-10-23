@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { ArrowLeft, Save, Loader2, Search, Filter, Plus, Minus, Send, CheckSquare, Clock, Calendar, X } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Plus, Minus, CheckSquare, X } from 'lucide-react';
 import { DEPARTMENT_USER_OPTIONS } from './departmentUserOptions';
 import SearchableUserSelect from './SearchableUserSelect';
+import SearchableJobSelect from './SearchableJobSelect';
 import {
   CUSTOMER_NAME_OPTIONS,
   INDUSTRY_OPTIONS,
@@ -12,7 +13,6 @@ import {
   PANEL_TYPE_OPTIONS
 } from './jobDropdownOptions';
 import { getAssociatedDateField } from './jobProgress';
-import { cleanJobNo, getHandoverAccountability } from '../config/marketingFormConfig';
 import SimpleHandoverModal from './SimpleHandoverModal';
 const TRANSPORT_OPTIONS = ['Inclusive', 'Exclusive', 'Others'];
 const PACKING_OPTIONS = ['Polythene', 'Crate Wooden', 'Sea Worthy', 'Export', 'Others'];
@@ -248,17 +248,20 @@ export default function NewJobForm() {
   const [missingRequired, setMissingRequired] = useState(new Set());
 
   const primaryDept = user?.departments?.[0] || 'marketing';
-  const deptName = user?.role === 'admin' ? 'Administrator' : primaryDept;
-  const showAllForms = user?.username?.toLowerCase() === 'keval v shah' || user?.role === 'admin' || user?.role === 'executive';
-  const isKeval = user?.username?.toLowerCase() === 'keval v shah';
-  const isMarketingOrAdmin = primaryDept === 'marketing' || user?.role === 'admin' || user?.role === 'executive' || showAllForms;
+  const userDepts = (user?.departments || []).map(d => String(d).toLowerCase().trim());
+  const userRole = (user?.role || '').toLowerCase().trim();
+  const userName = (user?.username || '').toLowerCase().trim();
+  const isKeval = userName === 'keval v shah' || userName === 'keval' || userName === 'kevalvshah';
+  const isAdmin = userRole === 'admin' || userRole === 'executive' || userRole === 'superadmin' || isKeval;
+  const isMarketing = userDepts.includes('marketing') || userRole === 'marketing_lead' || userRole === 'mktadmin';
+  const isMarketingOrAdmin = isAdmin || isMarketing;
   const canEditCore = isMarketingOrAdmin;
+  const showAllForms = isAdmin;
+  const deptName = isAdmin ? 'Administrator' : primaryDept;
 
   useEffect(() => {
-    if (!isMarketingOrAdmin) {
-      fetchJobs();
-    }
-  }, [isMarketingOrAdmin]);
+    fetchJobs();
+  }, []);
 
   useEffect(() => {
     if (id) {
@@ -313,10 +316,10 @@ export default function NewJobForm() {
   const fetchJobs = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/jobs');
-      setJobs(Array.isArray(res.data) ? res.data : (res.data.jobs || []));
+      const res = await api.get('/jobs/lookup');
+      setJobs(Array.isArray(res.data) ? res.data : (res.data?.jobs || []));
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load lookup jobs from database:', err);
     } finally {
       setLoading(false);
     }
@@ -385,7 +388,11 @@ export default function NewJobForm() {
   };
 
   const handleCoreChange = (field, value) => {
-    setCore(prev => ({ ...prev, [field]: value }));
+    let cleanVal = value;
+    if (field === 'jobNo' && typeof cleanVal === 'string') {
+      cleanVal = cleanVal.replace(/#/g, '');
+    }
+    setCore(prev => ({ ...prev, [field]: cleanVal }));
   };
 
   const isDepartmentUserField = (field) => {
@@ -474,26 +481,32 @@ export default function NewJobForm() {
 
     try {
       let savedJobId;
-      if (selectedJobId) {
-        savedJobId = selectedJobId;
+      if (id) {
+        // True Edit Mode (/jobs/edit/:id)
+        savedJobId = id;
         for (const [field, value] of Object.entries(deptFields)) {
-          await api.patch(`/jobs/${selectedJobId}/field`, {
+          await api.patch(`/jobs/${id}/field`, {
             department: primaryDept,
             field,
             value
           });
         }
         if (myTask.estimatedEffortHours) {
-          await api.patch(`/jobs/${selectedJobId}/workflow/my-task`, {
+          await api.patch(`/jobs/${id}/workflow/my-task`, {
             estimatedEffort: Number(myTask.estimatedEffortHours),
             targetedDate: myTask.taskTargetCompletionDate
           });
         }
       } else {
+        // New Job Mode (/jobs/new): Always creates a brand-new record in PostgreSQL!
         const targetDepartment = primaryDept === 'admin' ? 'marketing' : primaryDept;
         const allDepartmentsData = buildDepartmentPayload(deptFields, targetDepartment, true);
+        const cleanCore = { ...core };
+        if (cleanCore.jobNo) {
+          cleanCore.jobNo = cleanCore.jobNo.replace(/#/g, '').trim();
+        }
         const res = await api.post('/jobs', {
-          ...core,
+          ...cleanCore,
           date: new Date().toISOString().split('T')[0],
           targetDepartment,
           allDepartmentsData,
@@ -514,7 +527,7 @@ export default function NewJobForm() {
           notes: 'Submitted for Planning from Job Form'
         });
         navigate('/jobs/handover');
-      } else if (selectedJobId) {
+      } else if (savedJobId) {
         navigate(`/jobs/${savedJobId}`);
       } else {
         navigate('/my-jobs');
@@ -527,18 +540,19 @@ export default function NewJobForm() {
     }
   };
 
-  const inputClass = "mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2.5 border bg-white";
-  const selectClass = "mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2.5 border bg-white";
-  const labelClass = "block text-sm font-medium text-gray-700";
-  const requiredLabelClass = (id) => `block text-sm font-medium ${submitAttempted && missingRequired.has(id) ? 'text-red-700' : 'text-gray-700'}`;
+  const inputClass = "mt-1 block w-full h-[38px] rounded-[7px] border-slate-300 text-slate-800 text-[13px] px-3 shadow-2xs border bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors";
+  const selectClass = "mt-1 block w-full h-[38px] rounded-[7px] border-slate-300 text-slate-800 text-[13px] px-3 shadow-2xs border bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors";
+  const textareaClass = "mt-1 block w-full h-[64px] rounded-[7px] border-slate-300 text-slate-800 text-[13px] p-2.5 shadow-2xs border bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors resize-none";
+  const labelClass = "block text-[12px] font-semibold text-slate-700 tracking-tight";
+  const requiredLabelClass = (id) => `block text-[12px] font-semibold tracking-tight ${submitAttempted && missingRequired.has(id) ? 'text-red-700' : 'text-slate-700'}`;
   const isRequiredDeptMissing = (field, aliases = []) => !hasValue(firstValue(deptFields[field], valueByAliases(deptFields, aliases)));
-  const requiredDeptLabelClass = (field, aliases = []) => `block text-sm font-medium ${submitAttempted && isRequiredDeptMissing(field, aliases) ? 'text-red-700' : 'text-gray-700'}`;
+  const requiredDeptLabelClass = (field, aliases = []) => `block text-[12px] font-semibold tracking-tight ${submitAttempted && isRequiredDeptMissing(field, aliases) ? 'text-red-700' : 'text-slate-700'}`;
   const requiredDeptSelectClass = (field, aliases = []) => `${selectClass} ${submitAttempted && isRequiredDeptMissing(field, aliases) ? 'border-red-400 ring-1 ring-red-200' : ''}`;
   const requiredMark = <span className="text-red-600">*</span>;
 
 
-  const handleJobSelect = (e) => {
-    const jobId = e.target.value;
+  const handleJobSelect = async (jobOrId) => {
+    const jobId = jobOrId?.id || jobOrId;
     setSelectedJobId(jobId);
     if (!jobId) {
       setCore(EMPTY_CORE);
@@ -546,91 +560,133 @@ export default function NewJobForm() {
       setCurrentJob(null);
       return;
     }
-    const job = jobs.find(j => j.id.toString() === jobId.toString());
-    if (job) {
+
+    try {
+      setLoading(true);
+      const res = await api.get(`/jobs/${jobId}`);
+      const job = normalizeDatesInObject(res.data);
       setCurrentJob(job);
-      setCore(marketingCoreFromJob(job));
-      setDeptFields(job.departmentFields || job.fields?.[primaryDept] || {});
+      const coreData = marketingCoreFromJob(job);
+      if (coreData.jobNo) {
+        coreData.jobNo = coreData.jobNo.replace(/#/g, '').trim();
+      }
+      setCore(coreData);
+
+      let loadedFields = {};
+      if (showAllForms) {
+        loadedFields = Object.assign({}, ...Object.values(job.fields || {}), ...Object.values(job.allDepartmentsData || {}));
+      } else if (job.fields?.[primaryDept]) {
+        loadedFields = job.fields[primaryDept];
+      } else if (job.allDepartmentsData && job.allDepartmentsData[primaryDept]) {
+        loadedFields = job.allDepartmentsData[primaryDept];
+      } else if (job.fields && typeof job.fields === 'object') {
+        loadedFields = Object.assign({}, ...Object.values(job.fields));
+      }
+      setDeptFields(loadedFields || {});
+
+      // Auto-detect existing revisions
+      const docs = ['GA', 'SLD', 'BOQ', 'CONTROL'];
+      const detectedDocs = { GA: [0], SLD: [0], BOQ: [0], CONTROL: [0], PDF: [0] };
+      docs.forEach(doc => {
+        const revSet = new Set([0]);
+        Object.keys(loadedFields || {}).forEach(k => {
+          const m = k.match(new RegExp(`^Rev R(\\d+) ${doc}`, 'i'));
+          if (m) revSet.add(parseInt(m[1], 10));
+        });
+        detectedDocs[doc] = Array.from(revSet).sort((a, b) => a - b);
+      });
+      const pdfSet = new Set([0]);
+      Object.keys(loadedFields || {}).forEach(k => {
+        const m = k.match(/^Rev R(\d+) PDF/i) || k.match(/Client Submission Date R(\d+)/i) || k.match(/CLIENT SUBMISSION DATE R(\d+)/i);
+        if (m) pdfSet.add(parseInt(m[1], 10));
+      });
+      detectedDocs.PDF = Array.from(pdfSet).sort((a, b) => a - b);
+      setDocRevisions(detectedDocs);
+
       if (job.fields?.myTask) {
         setMyTask({
           estimatedEffortHours: job.fields.myTask.estimatedEffortHours || '',
           taskStartDate: job.fields.myTask.taskStartDate || new Date().toISOString().split('T')[0],
           taskTargetCompletionDate: job.fields.myTask.taskTargetCompletionDate || ''
         });
-      } else {
-        setMyTask({
-          estimatedEffortHours: '',
-          taskStartDate: new Date().toISOString().split('T')[0],
-          taskTargetCompletionDate: ''
-        });
       }
+    } catch (err) {
+      console.error('Failed to load selected job details:', err);
+      setError('Could not load existing job details from database. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+    <div className="max-w-6xl mx-auto space-y-4 pb-12">
       {/* Header */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-3">
         <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700">
-          <ArrowLeft size={24} />
+          <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 capitalize">New Job</h1>
-          <p className="text-gray-500 text-sm mt-1">Fill all details to initialize a new job for your department</p>
+          <h1 className="text-xl font-bold text-gray-900 capitalize">New Job</h1>
+          <p className="text-gray-500 text-xs mt-0.5">Fill all details to initialize a new job for your department</p>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-[7px] text-xs">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Job Selection / Mode for All Departments */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
-          <div className="px-6 py-3 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Job Mode: Create New or Select Existing</h3>
-              <p className="text-xs text-slate-500">All authorized departments can create new jobs or select an existing job to update details.</p>
-            </div>
-            {selectedJobId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedJobId('');
-                  setCore(EMPTY_CORE);
-                  setDeptFields({});
-                }}
-                className="text-xs text-blue-600 hover:text-blue-700 font-semibold underline self-start sm:self-auto"
-              >
-                + Switch to Create New Job
-              </button>
-            )}
-          </div>
-          <div className="p-4 bg-slate-50/50">
-            <select value={selectedJobId} onChange={handleJobSelect} className={selectClass}>
-              <option value="">-- [Create New Job] or Select Existing Job to Update --</option>
-              {jobs.map(j => (
-                <option key={j.id} value={j.id}>
-                  Job {cleanJobNo(j.jobNo)} - {j.panelName} ({j.clientName || 'General Client'}) — Responsible: {j.responsibleEnggName || 'N/A'}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Top-Level Job Mode Selector (OUTSIDE Main Form Section) */}
+      <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-visible relative z-30 mb-4">
+        <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-slate-900">
+            Job Mode: Create New or Select Existing
+          </h3>
+          {selectedJobId && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedJobId('');
+                setCore(EMPTY_CORE);
+                setDeptFields({});
+                setCurrentJob(null);
+              }}
+              className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              + Switch to Create New Job (Blank)
+            </button>
+          )}
         </div>
+        <div className="p-3 bg-slate-50/40 overflow-visible">
+          <SearchableJobSelect
+            jobs={jobs}
+            selectedJobId={selectedJobId}
+            onSelectJob={(job) => handleJobSelect(job.id)}
+            onClear={() => {
+              setSelectedJobId('');
+              setCore(EMPTY_CORE);
+              setDeptFields({});
+              setCurrentJob(null);
+            }}
+            loading={loading}
+          />
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
 
         {/* Core Job Details */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-blue-50 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-blue-900">Core Job Details</h3>
-            <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-              canEditCore ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
+        <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900">Core Job Details</h3>
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+              canEditCore ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
             }`}>
               {canEditCore ? 'Editable (Marketing / Admin)' : 'Read-Only (Managed by Marketing)'}
             </span>
           </div>
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3.5">
             <div>
               <label className={canEditCore ? requiredLabelClass('core:jobNo') : labelClass}>
                 Job Number {canEditCore && requiredMark}
@@ -712,17 +768,20 @@ export default function NewJobForm() {
                 Responsible Engineer {canEditCore && requiredMark}
               </label>
               {canEditCore ? (
-                <SearchableUserSelect
-                  value={core.responsibleEnggName}
-                  assignedId={core.assignedEngineerId}
-                  placeholder="Search active engineer..."
-                  onChange={(name, id) => {
-                    handleCoreChange('responsibleEnggName', name);
-                    handleCoreChange('assignedEngineerId', id);
-                  }}
-                />
+                <div className="mt-1">
+                  <SearchableUserSelect
+                    department="marketing"
+                    value={core.responsibleEnggName}
+                    assignedId={core.assignedEngineerId}
+                    placeholder="Select Responsible Engineer..."
+                    onChange={(name, id) => {
+                      handleCoreChange('responsibleEnggName', name);
+                      handleCoreChange('assignedEngineerId', id);
+                    }}
+                  />
+                </div>
               ) : (
-                <div className="mt-1 flex items-center gap-2 px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-800 font-medium cursor-not-allowed">
+                <div className="mt-1 flex items-center gap-2 px-3 h-[38px] bg-gray-100 border border-slate-300 rounded-[7px] text-[13px] text-gray-800 font-medium cursor-not-allowed">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                   <span>{core.responsibleEnggName || 'Not Assigned'}</span>
                 </div>
@@ -766,7 +825,13 @@ export default function NewJobForm() {
               <>
                 <div className="md:col-span-2">
                   <label className={labelClass}>Delivery Address</label>
-                  <input value={core.deliveryAddress} onChange={e => handleCoreChange('deliveryAddress', e.target.value)} className={inputClass} />
+                  <textarea
+                    rows={2}
+                    value={core.deliveryAddress}
+                    onChange={e => handleCoreChange('deliveryAddress', e.target.value)}
+                    className={textareaClass}
+                    placeholder="Enter delivery address..."
+                  />
                 </div>
                 <div>
                   <label className={labelClass}>Contact Person</label>
@@ -796,127 +861,80 @@ export default function NewJobForm() {
                 </div>
                 <div className="md:col-span-2">
                   <label className={labelClass}>Marketing Remarks</label>
-                  <input value={deptFields['Marketing Remarks'] || ''} onChange={e => handleDeptChange('Marketing Remarks', e.target.value)} className={inputClass} />
+                  <textarea
+                    rows={2}
+                    value={deptFields['Marketing Remarks'] || ''}
+                    onChange={e => handleDeptChange('Marketing Remarks', e.target.value)}
+                    className={textareaClass}
+                    placeholder="Enter marketing remarks..."
+                  />
                 </div>
               </>
             )}
           </div>
         </div>
 
-        {/* ⭐ MY TASK SECTION (Directly after Core Job Details & before Department-Specific Sections) */}
-        <div className="bg-white rounded-lg shadow-sm border border-indigo-200/80 overflow-hidden">
-          <div className="px-6 py-4 border-b border-indigo-100 bg-indigo-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs">
-                <CheckSquare size={18} />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-indigo-950 flex items-center gap-2 tracking-tight">
-                  My Task
-                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                    Execution Planning
-                  </span>
-                </h3>
-                <p className="text-xs text-indigo-600/90 mt-0.5">
-                  Plan your work effort and schedule. Task dates are kept strictly separate from project delivery dates.
-                </p>
-              </div>
+        {/* Planning / Task Section (Inline & Compact) */}
+        <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={16} className="text-blue-600" />
+              <h3 className="text-sm font-bold text-slate-900">Planning / Task</h3>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setTaskModalDraft({ ...myTask });
-                setTaskModalError('');
-                setIsTaskModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0"
-            >
-              <CheckSquare size={14} />
-              <span>Open My Task Pop-up</span>
-            </button>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+              Task Planning
+            </span>
           </div>
 
-          <div className="p-6">
-            {/* Live Summary Badges */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
-                  <Clock size={14} className="text-indigo-600" />
-                  <span>Estimated Effort (Hours)</span>
-                  <span className="text-rose-500 font-bold">*</span>
-                </div>
-                <div className="text-lg font-black text-slate-900">
-                  {myTask.estimatedEffortHours ? (
-                    <span>{myTask.estimatedEffortHours} <span className="text-xs font-medium text-slate-400">hours</span></span>
-                  ) : (
-                    <span className="text-xs text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      Not Set (Click Pop-up)
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
-                  <Calendar size={14} className="text-indigo-600" />
-                  <span>Task Start Date</span>
-                  <span className="text-rose-500 font-bold">*</span>
-                </div>
-                <div className="text-lg font-black text-slate-900">
-                  {myTask.taskStartDate ? (
-                    <span>{myTask.taskStartDate}</span>
-                  ) : (
-                    <span className="text-xs text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      Not Set
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
-                  <Calendar size={14} className="text-indigo-600" />
-                  <span>Task Target Completion Date</span>
-                  <span className="text-rose-500 font-bold">*</span>
-                </div>
-                <div className="text-lg font-black text-slate-900">
-                  {myTask.taskTargetCompletionDate ? (
-                    <span>{myTask.taskTargetCompletionDate}</span>
-                  ) : (
-                    <span className="text-xs text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      Not Set
-                    </span>
-                  )}
-                </div>
-              </div>
+          <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3.5">
+            <div>
+              <label className={labelClass}>
+                Estimated Effort (Hours)
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                min="0.1"
+                placeholder="e.g. 8"
+                value={myTask.estimatedEffortHours}
+                onChange={(e) => setMyTask(prev => ({ ...prev, estimatedEffortHours: e.target.value }))}
+                className={inputClass}
+              />
             </div>
 
-            {/* Helper Notice & Quick Action */}
-            <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 bg-indigo-50/40 p-3 rounded-xl border border-indigo-100">
-              <span>Configured task details will be automatically linked and available under <strong>My Tasks</strong> upon saving.</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setTaskModalDraft({ ...myTask });
-                  setTaskModalError('');
-                  setIsTaskModalOpen(true);
-                }}
-                className="text-indigo-700 hover:text-indigo-900 font-bold underline shrink-0"
-              >
-                Configure in Pop-up →
-              </button>
+            <div>
+              <label className={labelClass}>
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={myTask.taskStartDate}
+                onChange={(e) => setMyTask(prev => ({ ...prev, taskStartDate: e.target.value }))}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Target Completion
+              </label>
+              <input
+                type="date"
+                value={myTask.taskTargetCompletionDate}
+                onChange={(e) => setMyTask(prev => ({ ...prev, taskTargetCompletionDate: e.target.value }))}
+                className={inputClass}
+              />
             </div>
           </div>
         </div>
 
         {(primaryDept === 'design' || showAllForms) && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 bg-green-50">
-                <h3 className="text-lg font-bold text-green-900">Design - Electrical</h3>
+          <div className="space-y-4">
+            <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-200 bg-emerald-50">
+                <h3 className="text-sm font-bold text-emerald-900">Design - Electrical</h3>
               </div>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3.5">
               <div>
                 <label className={labelClass}>Planned Date</label>
                 <input type="date" value={deptFields['Design Planned Date'] || ''} onChange={e => handleDeptChange('Design Planned Date', e.target.value)} className={inputClass} />
@@ -954,15 +972,15 @@ export default function NewJobForm() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 bg-green-100 flex items-center justify-between">
+          <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-200 bg-emerald-100/70 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-green-900">Drawing Submission Date and Engineer Name</h3>
-                <p className="text-xs text-green-800 mt-0.5">Manage revisions (+ / -) independently for GA, SLD, BOQ, and CONTROL</p>
+                <h3 className="text-sm font-bold text-emerald-950">Drawing Submission Date and Engineer Name</h3>
+                <p className="text-[11px] text-emerald-800 mt-0.5">Manage revisions (+ / -) independently for GA, SLD, BOQ, and CONTROL</p>
               </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-5 space-y-4">
               {['GA', 'SLD', 'BOQ', 'CONTROL'].map(doc => {
                 const revs = docRevisions[doc] || [0];
                 const maxRev = Math.max(...revs, 0);
@@ -1167,11 +1185,11 @@ export default function NewJobForm() {
         )}
 
         {(primaryDept === 'purchase' || showAllForms) && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 bg-purple-50">
-              <h3 className="text-lg font-bold text-purple-900">Procurement Details</h3>
+          <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-200 bg-purple-50">
+              <h3 className="text-sm font-bold text-purple-900">Procurement Details</h3>
             </div>
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3.5">
               <div>
                 <label className={labelClass}>Switchgear PO Number</label>
                 <input type="text" value={deptFields['Switchgear PO Number'] || ''} onChange={e => handleDeptChange('Switchgear PO Number', e.target.value)} className={inputClass} />
@@ -1193,14 +1211,14 @@ export default function NewJobForm() {
         )}
 
         {(primaryDept === 'mechanical' || showAllForms) && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 bg-orange-50">
-              <h3 className="text-lg font-bold text-orange-900">Design - Mechanical</h3>
+          <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-200 bg-amber-50">
+              <h3 className="text-sm font-bold text-amber-900">Design - Mechanical</h3>
             </div>
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3.5">
               
-              <div className="col-span-full border-b border-orange-100 pb-2 mb-2">
-                <h4 className="text-sm font-bold text-orange-900 uppercase tracking-wide">Drawing & Programming</h4>
+              <div className="col-span-full border-b border-amber-100 pb-1.5 mb-1">
+                <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide">Drawing & Programming</h4>
               </div>
               
               <div><label className={labelClass}>Drawing start Date</label><input type="date" value={deptFields['Drawing start Date'] || ''} onChange={e => handleDeptChange('Drawing start Date', e.target.value)} className={inputClass} /></div>
@@ -1366,12 +1384,12 @@ export default function NewJobForm() {
         )}
 
         {(primaryDept === 'production' || primaryDept === 'dispatch' || primaryDept === 'qc' || showAllForms) && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden space-y-6">
-            <div className="px-6 py-4 border-b border-gray-200 bg-green-50">
-              <h3 className="text-lg font-bold text-green-900">Production, QC & Dispatch Details</h3>
+          <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden space-y-4">
+            <div className="px-4 py-2.5 border-b border-slate-200 bg-emerald-50">
+              <h3 className="text-sm font-bold text-emerald-900">Production, QC & Dispatch Details</h3>
             </div>
             
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3.5">
               <div>
                 <label className={requiredDeptLabelClass('Responsible Job Engineer')}>Responsible Job engg. Name {requiredMark}</label>
                 <select value={deptFields['Responsible Job Engineer'] || ''} onChange={e => handleDeptChange('Responsible Job Engineer', e.target.value)} className={requiredDeptSelectClass('Responsible Job Engineer')}>
@@ -1426,12 +1444,12 @@ export default function NewJobForm() {
           </div>
         )}
 
-        {/* Submit Actions: Cancel & Save Only */}
-        <div className="flex items-center justify-end gap-3 pt-5 border-t border-slate-200">
+        {/* Compact Action Footer */}
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors text-sm"
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-[7px] text-xs font-semibold transition-colors"
           >
             Cancel
           </button>
@@ -1439,10 +1457,10 @@ export default function NewJobForm() {
             type="button"
             onClick={(e) => handleSubmit(e, false)}
             disabled={saving}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-50 transition-all shadow-md shadow-blue-500/20 text-sm"
+            className="flex items-center gap-1.5 px-5 py-2 bg-[#1E3F66] hover:bg-[#163050] text-white rounded-[7px] text-xs font-semibold disabled:opacity-50 transition-all shadow-xs cursor-pointer"
           >
-            {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-            <span>{saving ? 'Saving...' : 'Save'}</span>
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+            <span>{saving ? 'Creating Job...' : 'Create Job'}</span>
           </button>
         </div>
       </form>

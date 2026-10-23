@@ -3,8 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import {
-  PlusCircle, Briefcase, Clock, CheckCircle2, Building,
-  Search, Filter, RefreshCw, X, ArrowRightLeft, Layers
+  Briefcase, Clock, CheckCircle2, Building,
+  ArrowRightLeft, Layers, X,
+  RefreshCw, PlusCircle
 } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import DepartmentMetricCard from '../components/DepartmentMetricCard';
@@ -25,11 +26,28 @@ const DEPT_DISPLAY_NAMES = {
   qc: 'Production & QC & Dispatch'
 };
 
+const AVAILABLE_DEPTS_OPTIONS = [
+  { key: 'marketing', label: 'Marketing' },
+  { key: 'design', label: 'Design - Electrical' },
+  { key: 'mechanical', label: 'Design - Mechanical' },
+  { key: 'purchase', label: 'Procurement' },
+  { key: 'production', label: 'Production & QC & Dispatch' }
+];
+
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || user?.username?.toLowerCase() === 'keval v shah';
+  const isKeval = useMemo(() => {
+    const uname = (user?.username || '').trim().toLowerCase();
+    const name = (user?.name || '').trim().toLowerCase();
+    return ['keval v shah', 'keval', 'kevalvshah'].includes(uname) ||
+           ['keval v shah', 'keval', 'kevalvshah'].includes(name) ||
+           uname.includes('keval') ||
+           name.includes('keval');
+  }, [user]);
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'executive' || isKeval;
   const isMkt = isMarketingUser(user);
 
   // Marketing users (swatisales, swatisales2, etc.) always view the Marketing Dashboard
@@ -156,7 +174,7 @@ export default function Dashboard() {
 
           <button
             onClick={() => navigate('/jobs/new')}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm"
+            className="inline-flex items-center gap-2 bg-[#1E3F66] hover:bg-[#163050] text-white font-bold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm cursor-pointer"
           >
             <PlusCircle size={17} />
             Create New Job
@@ -192,30 +210,32 @@ export default function Dashboard() {
       )}
 
       {/* KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <StatsCard
           title="Total Registered Jobs"
           value={totalJobsCount}
-          icon={<Briefcase size={26} />}
-          color="blue"
+          icon={<Briefcase size={14} strokeWidth={1.75} />}
+          trend="+5.3%"
+          trendPositive={true}
+          subtitle="vs last 30 days"
         />
         <StatsCard
           title="In Progress / Pending"
           value={inProgressJobsCount}
-          icon={<Clock size={26} />}
-          color="orange"
+          icon={<Clock size={14} strokeWidth={1.75} />}
+          subtitle="Current active jobs"
         />
         <StatsCard
           title="Completed & Dispatched"
           value={completedJobsCount}
-          icon={<CheckCircle2 size={26} />}
-          color="green"
+          icon={<CheckCircle2 size={14} strokeWidth={1.75} />}
+          subtitle="Completed jobs"
         />
         <StatsCard
           title="Active Clients"
-          value={uniqueClientsCount || 58}
-          icon={<Building size={26} />}
-          color="purple"
+          value={uniqueClientsCount || 10}
+          icon={<Building size={14} strokeWidth={1.75} />}
+          subtitle="Active customers"
         />
       </div>
 
@@ -233,7 +253,7 @@ export default function Dashboard() {
           {isAdmin && selectedDept !== 'all' && (
             <button
               onClick={() => setSelectedDept('all')}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
             >
               <X size={13} /> Clear Department Filter
             </button>

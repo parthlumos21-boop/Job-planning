@@ -2,21 +2,24 @@ import os
 import uuid
 import shutil
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime, timezone, date, timedelta
 from app.db.session import get_db
 from app.api.deps import get_current_user, is_admin_or_keval, require_admin, require_keval
-from app.models import Job, JobHandover, DepartmentActivity, User, Account, JobAssignmentHistory, JobExecutionSession, DepartmentTask
+from app.models import Job, JobHandover, DepartmentActivity, User, Account, JobAssignmentHistory, JobExecutionSession, DepartmentTask, JobDocument
 from app.schemas import UserPayload
 from app.core.events import broadcaster
 from app.api.v1.jobs import format_job_row
 
 router = APIRouter(prefix="/jobs", tags=["Job Handover"])
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads")
+# Unified Upload Directory (points to server-py/uploads, matching main.py)
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "uploads")
+LEGACY_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 async def safe_json_body(request: Request) -> dict:
@@ -183,27 +186,32 @@ async def accept_job_handover(
     planning_owner_name = body.get("planning_owner_name") or body.get("planningOwnerName")
     notes = body.get("notes") or ""
 
+    user_dept = (user.departments[0] if user.departments else (job.target_department or "design")).lower()
     previous_status = job.handover_status
-    new_status = "Accepted"
+    new_status = f"{user_dept.capitalize()} Accepted" if user_dept in ["design", "mechanical", "purchase", "production"] else "Accepted"
 
     job.handover_status = new_status
+    job.current_stage = "PLANNING_ACTIVE"
     job.handover_accepted_at = func.now()
+    job.current_department = user_dept
 
-    valid_owner_id = await _resolve_valid_user_id(db, planning_owner_id, planning_owner_name)
+    valid_owner_id = await _resolve_valid_user_id(db, planning_owner_id or user.id, planning_owner_name or user.name or user.username)
     job.planning_owner_id = valid_owner_id
-    if planning_owner_name:
-        job.planning_owner_name = str(planning_owner_name).strip()
+    job.planning_owner_name = str(planning_owner_name or user.name or user.username).strip()
+    job.assigned_user_id = valid_owner_id
+    job.assigned_user_name = user.name or user.username
 
-    # Create immutable handover history record
+    # Create immutable handover history record with Responsible Engineer
     handover_record = JobHandover(
         job_id=job.id,
-        handover_type="PLANNING",
-        from_department="planning",
-        to_department="planning",
+        handover_type="DEPARTMENT",
+        from_department=job.from_department if hasattr(job, "from_department") and job.from_department else "marketing",
+        to_department=user_dept,
         to_worker_id=valid_owner_id,
-        reason="Handover Accepted by Planning",
-        notes=notes or f"Accepted by {user.name or user.username}. Planning Owner: {job.planning_owner_name or 'Unassigned'}",
-        work_completed_summary=f"Handover accepted. Planning owner assigned: {job.planning_owner_name or 'None'}",
+        reason=f"Handover Accepted by {user_dept.capitalize()}",
+        notes=notes or f"Accepted by {user.name or user.username}. Assigned Owner: {job.planning_owner_name}",
+        responsible_engg_name=job.responsible_engg_name or "",
+        work_completed_summary=f"Handover accepted by {user.name or user.username}. Responsible Engg: {job.responsible_engg_name or 'Unassigned'}",
         performed_by=user.name or user.username,
         status_at_handover=new_status,
         progress_at_handover=job.progress_percentage or 0.0
@@ -213,18 +221,44 @@ async def accept_job_handover(
     # Activity log
     activity = DepartmentActivity(
         job_id=job.id,
-        department="planning",
+        department=user_dept,
         action="HANDOVER_ACCEPTED",
         old_value={"handover_status": previous_status},
         new_value={
             "handover_status": new_status,
             "planning_owner_id": job.planning_owner_id,
             "planning_owner_name": job.planning_owner_name,
+            "responsible_engg_name": job.responsible_engg_name or "",
             "accepted_by": user.name or user.username
         },
         updated_by=user.name or user.username
     )
     db.add(activity)
+
+    # Automatically add to receiving user's "My Tasks" queue
+    from app.models import DepartmentTask
+    t_stmt = select(DepartmentTask).where(
+        DepartmentTask.job_id == job.id,
+        DepartmentTask.department == user_dept,
+        DepartmentTask.assigned_user_name == (user.name or user.username),
+        DepartmentTask.status == "In Progress"
+    )
+    t_res = await db.execute(t_stmt)
+    if not t_res.scalar_one_or_none():
+        new_task = DepartmentTask(
+            job_id=job.id,
+            department=user_dept,
+            task_name=f"{user_dept.capitalize()} Milestone: {job.panel_name or 'Panel Execution'}",
+            description=notes or f"Accepted by {user.name or user.username}. Technical review and execution underway.",
+            assigned_user_id=getattr(user, "id", None),
+            assigned_user_name=user.name or user.username,
+            created_by_user_id=getattr(user, "id", None),
+            created_by_name=user.name or user.username,
+            start_date=date.today(),
+            target_date=date.today() + timedelta(days=7),
+            status="In Progress"
+        )
+        db.add(new_task)
 
     await db.commit()
     await db.refresh(job)
@@ -235,14 +269,15 @@ async def accept_job_handover(
         "jobNo": job.job_no,
         "panelName": job.panel_name,
         "planningOwner": job.planning_owner_name,
+        "responsibleEngineer": job.responsible_engg_name,
         "acceptedBy": user.name or user.username,
         "status": new_status,
-        "message": f"Job #{job.job_no} accepted by Planning. Owner: {job.planning_owner_name or user.name or user.username}"
+        "message": f"Job #{job.job_no} accepted by {user_dept.capitalize()} ({user.name or user.username}). Responsible Engg: {job.responsible_engg_name or 'Unassigned'}"
     })
 
     return {
         "success": True,
-        "message": f"Job #{job.job_no} handover accepted successfully",
+        "message": f"Job #{job.job_no} handover accepted successfully and added to My Tasks queue",
         "job": format_job_row(job)
     }
 
@@ -259,28 +294,36 @@ async def return_job_handover(
         raise HTTPException(status_code=404, detail="Job not found")
 
     body = await safe_json_body(request)
-    reason = (body.get("reason") or body.get("returnReason") or body.get("notes") or "").strip()
-    if not reason or len(reason) < 5:
+    reason = (body.get("reason") or body.get("returnReason") or "Other").strip()
+    comment = (body.get("comment") or body.get("returnComment") or body.get("notes") or "").strip()
+    
+    if not comment or len(comment) < 3:
         raise HTTPException(
             status_code=400,
-            detail="A detailed return reason (at least 5 characters) is required"
+            detail="A detailed return explanation comment (at least 3 characters) is required"
         )
 
     previous_status = job.handover_status
-    new_status = "Returned for Correction"
+    new_status = "Returned to Marketing"
 
     job.handover_status = new_status
-    job.handover_return_reason = reason
+    job.current_stage = "NEEDS_CLARIFICATION"
+    job.return_reason = reason
+    job.return_comment = comment
+    job.handover_return_reason = f"[{reason}] {comment}"
+    job.returned_by = user.name or user.username
+    job.returned_at = func.now()
 
     # Create immutable handover history record
     handover_record = JobHandover(
         job_id=job.id,
-        handover_type="PLANNING",
-        from_department="planning",
+        handover_type="DEPARTMENT",
+        from_department=user.departments[0] if user.departments else "design",
         to_department="marketing",
         reason=f"Returned: {reason}",
-        notes=reason,
-        work_completed_summary=f"Handover returned for correction by {user.name or user.username}. Reason: {reason}",
+        notes=comment,
+        responsible_engg_name=job.responsible_engg_name or "",
+        work_completed_summary=f"Handover returned to Marketing by {user.name or user.username}. Reason: {reason}. Comment: {comment}",
         performed_by=user.name or user.username,
         status_at_handover=new_status,
         progress_at_handover=job.progress_percentage or 0.0
@@ -290,10 +333,16 @@ async def return_job_handover(
     # Activity log
     activity = DepartmentActivity(
         job_id=job.id,
-        department="planning",
+        department=user.departments[0] if user.departments else "design",
         action="HANDOVER_RETURNED",
         old_value={"handover_status": previous_status},
-        new_value={"handover_status": new_status, "reason": reason, "returned_by": user.name or user.username},
+        new_value={
+            "handover_status": new_status,
+            "return_reason": reason,
+            "return_comment": comment,
+            "responsible_engg_name": job.responsible_engg_name or "",
+            "returned_by": user.name or user.username
+        },
         updated_by=user.name or user.username
     )
     db.add(activity)
@@ -307,15 +356,232 @@ async def return_job_handover(
         "jobNo": job.job_no,
         "panelName": job.panel_name,
         "returnedBy": user.name or user.username,
+        "responsibleEngineer": job.responsible_engg_name,
         "reason": reason,
+        "comment": comment,
         "status": new_status,
-        "message": f"Job #{job.job_no} returned for correction: {reason}"
+        "message": f"Job #{job.job_no} returned to Marketing: [{reason}] {comment}"
     })
 
     return {
         "success": True,
-        "message": f"Job #{job.job_no} returned for correction",
+        "message": f"Job #{job.job_no} returned to Marketing for correction",
         "job": format_job_row(job)
+    }
+
+# 3b. POST /api/jobs/{id}/reassign-engineer
+@router.post("/{id}/reassign-engineer")
+async def reassign_responsible_engineer(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    new_engineer = (body.get("new_engineer_name") or body.get("newEngineerName") or body.get("responsibleEngineer") or "").strip()
+    reason = (body.get("reason") or body.get("reassignmentReason") or "").strip()
+
+    if not new_engineer:
+        raise HTTPException(status_code=400, detail="New Responsible Engineer name is required")
+    if not reason or len(reason) < 3:
+        raise HTTPException(status_code=400, detail="A mandatory reason for reassignment (at least 3 characters) is required")
+
+    # Permission check: Marketing users, Admins, or Keval V Shah
+    user_u_lower = (user.username or "").lower().strip()
+    is_mkt_user = "marketing" in [d.lower() for d in user.departments] or "sales" in user_u_lower or "mkt" in user_u_lower
+    is_admin = user.role in ["admin", "executive"] or user_u_lower == "keval v shah"
+
+    if not (is_mkt_user or is_admin):
+        raise HTTPException(
+            status_code=403,
+            detail="Only Marketing users or System Administrators are authorized to reassign the Responsible Engineer."
+        )
+
+    previous_engineer = job.responsible_engg_name or "Unassigned"
+    
+    # Update job without silently overwriting: store previous and record immutable history
+    job.previous_responsible_engg_name = previous_engineer
+    job.responsible_engg_name = new_engineer
+
+    # Also synchronize inside JSONB fields
+    fields_dict = dict(job.fields or {})
+    mkt_fields = dict(fields_dict.get("marketing") or {})
+    mkt_fields["Responsible Engg. Name"] = new_engineer
+    mkt_fields["Responsible Engineer"] = new_engineer
+    fields_dict["marketing"] = mkt_fields
+    job.fields = fields_dict
+    flag_modified(job, "fields")
+
+    # Append to reassignment_history
+    history_entry = {
+        "from_engineer": previous_engineer,
+        "to_engineer": new_engineer,
+        "reassigned_by": user.name or user.username,
+        "reassigned_at": datetime.now(timezone.utc).isoformat(),
+        "department": user.departments[0] if user.departments else "marketing",
+        "reason": reason
+    }
+    history_list = list(getattr(job, "reassignment_history", None) or [])
+    history_list.append(history_entry)
+    job.reassignment_history = history_list
+    flag_modified(job, "reassignment_history")
+
+    # Create immutable handover audit entry
+    handover_record = JobHandover(
+        job_id=job.id,
+        handover_type="REASSIGNMENT",
+        from_department=user.departments[0] if user.departments else "marketing",
+        to_department=job.target_department or "design",
+        reason=f"Responsible Engineer Reassigned: {reason}",
+        notes=f"Reassigned from {previous_engineer} to {new_engineer}. Reason: {reason}",
+        responsible_engg_name=new_engineer,
+        previous_responsible_engg_name=previous_engineer,
+        reassignment_reason=reason,
+        performed_by=user.name or user.username,
+        status_at_handover=job.handover_status or "Draft",
+        progress_at_handover=job.progress_percentage or 0.0
+    )
+    db.add(handover_record)
+
+    # Department activity record
+    activity = DepartmentActivity(
+        job_id=job.id,
+        department=user.departments[0] if user.departments else "marketing",
+        action="RESPONSIBLE_ENGINEER_REASSIGNED",
+        old_value={"responsible_engg_name": previous_engineer},
+        new_value={
+            "responsible_engg_name": new_engineer,
+            "previous_responsible_engg_name": previous_engineer,
+            "reason": reason,
+            "reassigned_by": user.name or user.username
+        },
+        updated_by=user.name or user.username
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(job)
+
+    # Broadcast SSE
+    await broadcaster.broadcast("RESPONSIBLE_ENGINEER_REASSIGNED", {
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "panelName": job.panel_name,
+        "previousEngineer": previous_engineer,
+        "newEngineer": new_engineer,
+        "reassignedBy": user.name or user.username,
+        "reason": reason,
+        "message": f"Responsible Engineer for Job #{job.job_no} reassigned: {previous_engineer} → {new_engineer}"
+    })
+
+    return {
+        "success": True,
+        "message": f"Responsible Engineer successfully reassigned to {new_engineer}",
+        "job": format_job_row(job)
+    }
+
+# 3c. POST /api/jobs/{id}/handover/re-submit
+@router.post("/{id}/handover/re-submit")
+async def resubmit_job_handover(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    target_dept = (body.get("target_department") or body.get("targetDepartment") or job.target_department or "design").lower()
+    notes = (body.get("notes") or body.get("handoverNotes") or "Corrected technical package resubmitted to Design.").strip()
+
+    previous_status = job.handover_status
+    new_status = f"Submitted to {target_dept.capitalize()}"
+
+    # Clear return states
+    job.handover_status = new_status
+    job.current_stage = "VERIFICATION"
+    job.target_department = target_dept
+    job.handover_submitted_at = func.now()
+    job.handover_notes = notes
+    job.return_reason = None
+    job.return_comment = None
+    job.handover_return_reason = None
+
+    handover_record = JobHandover(
+        job_id=job.id,
+        handover_type="DEPARTMENT",
+        from_department="marketing",
+        to_department=target_dept,
+        reason=f"Re-Handover to {target_dept.capitalize()} after correction",
+        notes=notes,
+        responsible_engg_name=job.responsible_engg_name or "",
+        work_completed_summary=f"Re-submitted by {user.name or user.username}. Previous issue addressed.",
+        performed_by=user.name or user.username,
+        status_at_handover=new_status,
+        progress_at_handover=job.progress_percentage or 0.0
+    )
+    db.add(handover_record)
+
+    activity = DepartmentActivity(
+        job_id=job.id,
+        department="marketing",
+        action="HANDOVER_RESUBMITTED",
+        old_value={"handover_status": previous_status},
+        new_value={
+            "handover_status": new_status,
+            "target_department": target_dept,
+            "notes": notes,
+            "responsible_engg_name": job.responsible_engg_name or ""
+        },
+        updated_by=user.name or user.username
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(job)
+
+    await broadcaster.broadcast("HANDOVER_SUBMITTED", {
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "panelName": job.panel_name,
+        "fromDepartment": "marketing",
+        "targetDepartment": target_dept,
+        "submittedBy": user.name or user.username,
+        "responsibleEngineer": job.responsible_engg_name,
+        "status": new_status,
+        "message": f"Job #{job.job_no} re-submitted to {target_dept.capitalize()} by {user.name or user.username}"
+    })
+
+    return {
+        "success": True,
+        "message": f"Job #{job.job_no} re-submitted to {target_dept.capitalize()} successfully",
+        "job": format_job_row(job)
+    }
+
+# 3d. GET /api/jobs/{id}/reassignment-history
+@router.get("/{id}/reassignment-history")
+async def get_reassignment_history(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return {
+        "jobId": job.external_id or job.id,
+        "jobNo": job.job_no,
+        "panelName": job.panel_name,
+        "currentResponsibleEngineer": job.responsible_engg_name,
+        "previousResponsibleEngineer": getattr(job, "previous_responsible_engg_name", "") or "",
+        "history": getattr(job, "reassignment_history", []) or []
     }
 
 # 4. POST /api/jobs/{id}/handover/forward
@@ -1577,6 +1843,9 @@ async def get_control_center_timeline(
             "toDepartment": r.to_department or "planning",
             "reason": r.reason,
             "notes": r.notes,
+            "responsibleEnggName": getattr(r, "responsible_engg_name", "") or job.responsible_engg_name or "",
+            "previousResponsibleEnggName": getattr(r, "previous_responsible_engg_name", "") or getattr(job, "previous_responsible_engg_name", "") or "",
+            "reassignmentReason": getattr(r, "reassignment_reason", "") or "",
             "timestamp": ts,
             "created_at": ts
         })
@@ -1584,8 +1853,10 @@ async def get_control_center_timeline(
     for a in activities:
         ts = a.created_at.isoformat() if a.created_at else None
         p_by = a.updated_by or (a.new_value or {}).get("started_by") or (a.new_value or {}).get("assigned_by") or "Admin"
-        notes = (a.new_value or {}).get("note") or (a.new_value or {}).get("explanation") or ""
-        reason = (a.new_value or {}).get("category") or ""
+        notes = (a.new_value or {}).get("note") or (a.new_value or {}).get("explanation") or (a.new_value or {}).get("reason") or ""
+        reason = (a.new_value or {}).get("category") or (a.new_value or {}).get("return_reason") or ""
+        resp_engg = (a.new_value or {}).get("responsible_engg_name") or job.responsible_engg_name or ""
+        prev_engg = (a.new_value or {}).get("previous_responsible_engg_name") or (a.old_value or {}).get("responsible_engg_name") or ""
         ts_minute = ts[:16] if ts else ""
         dedup_key = f"{a.action}-{ts_minute}"
         if dedup_key in seen_keys:
@@ -1604,6 +1875,8 @@ async def get_control_center_timeline(
             "newValue": a.new_value,
             "notes": notes,
             "reason": reason,
+            "responsibleEnggName": resp_engg,
+            "previousResponsibleEnggName": prev_engg,
             "timestamp": ts,
             "created_at": ts
         })
@@ -1951,8 +2224,37 @@ async def get_job_workflow_state(
         await db.commit()
         await db.refresh(active_task)
 
-    # Calculate readiness check
-    readiness = compute_planning_readiness(job)
+    # Fetch all department tasks for this job from PostgreSQL
+    all_t_stmt = select(DepartmentTask).where(DepartmentTask.job_id == job.id).order_by(DepartmentTask.id)
+    all_t_res = await db.execute(all_t_stmt)
+    all_job_tasks = list(all_t_res.scalars().all())
+
+    curr_dept_tasks = [t for t in all_job_tasks if normalize_dept_key(t.department) == curr_dept_norm]
+    tasks_all_completed = bool(curr_dept_tasks and all((t.status or "").lower() == "completed" for t in curr_dept_tasks))
+
+    # Fetch all job documents from PostgreSQL table job_documents
+    docs_stmt = select(JobDocument).where(JobDocument.job_id == job.id).order_by(desc(JobDocument.uploaded_at))
+    docs_res = await db.execute(docs_stmt)
+    all_job_docs = list(docs_res.scalars().all())
+    has_documents = bool(len(all_job_docs) > 0 or getattr(job, "attachments", None))
+
+    has_resp_engg = bool(job.responsible_engg_name)
+    has_target_date = bool(job.expected_date or getattr(job, "delivery_date", None) or getattr(job, "stage_due_date", None) or getattr(job, "planned_end_at", None))
+
+    # Calculate lightweight readiness check (5 conditions from approved plan)
+    readiness_requirements = [
+        {"key": "tasks_completed", "label": "Required department tasks completed", "ready": tasks_all_completed, "missingAction": "COMPLETE_TASKS"},
+        {"key": "documents_available", "label": "Required specifications/documents available", "ready": has_documents, "missingAction": "UPLOAD_DOCUMENT"},
+        {"key": "responsible_assigned", "label": "Responsible engineer assigned", "ready": has_resp_engg, "missingAction": "ASSIGN_ENGINEER"},
+        {"key": "target_date_defined", "label": "Milestone target date defined", "ready": has_target_date, "missingAction": "SET_TARGET_DATE"}
+    ]
+    is_fully_ready = tasks_all_completed and has_resp_engg
+
+    readiness = {
+        "score": f"{sum([tasks_all_completed, has_documents, has_resp_engg, has_target_date])}/4",
+        "isFullyReady": is_fully_ready,
+        "requirements": readiness_requirements
+    }
 
     # Fetch pending incoming handover record if job is pending acceptance
     h_stmt = select(JobHandover).where(
@@ -1971,9 +2273,7 @@ async def get_job_workflow_state(
         else:
             primary_action = "WAITING_ACCEPTANCE"
     elif curr_status == "In Progress":
-        task_completed = active_task and active_task.status.lower() == "completed"
-        is_ready = bool(readiness.get("isFullyReady", False))
-        if task_completed and is_ready:
+        if is_fully_ready:
             primary_action = "HANDOVER"
         else:
             primary_action = "UPDATE_TASK"
@@ -1994,8 +2294,68 @@ async def get_job_workflow_state(
             "action": a.action,
             "department": a.department,
             "performedBy": a.updated_by,
+            "responsibleEnggName": (a.new_value or {}).get("responsible_engg_name") or job.responsible_engg_name or "",
+            "previousResponsibleEnggName": (a.new_value or {}).get("previous_responsible_engg_name") or "",
             "timestamp": a.created_at.isoformat() if getattr(a, "created_at", None) else None,
             "details": a.new_value
+        })
+
+    # Format department tasks list
+    today_d = date.today()
+    formatted_tasks = []
+    for t in all_job_tasks:
+        is_comp = (t.status or "").lower() == "completed"
+        timing_status = "On Time"
+        if is_comp:
+            if t.completed_at and t.target_date:
+                t_comp_date = t.completed_at.date() if hasattr(t.completed_at, "date") else t.completed_at
+                if t_comp_date < t.target_date:
+                    timing_status = "Completed Early"
+                elif t_comp_date == t.target_date:
+                    timing_status = "Completed On Time"
+                else:
+                    timing_status = "Completed Late"
+            else:
+                timing_status = "Completed"
+        else:
+            if t.target_date and t.target_date < today_d:
+                timing_status = "Overdue"
+            else:
+                timing_status = "On Time"
+
+        formatted_tasks.append({
+            "id": t.id,
+            "taskName": t.task_name,
+            "department": t.department,
+            "assignedUser": t.assigned_user_name or "Unassigned",
+            "startDate": t.start_date.isoformat() if t.start_date else None,
+            "targetDate": t.target_date.isoformat() if t.target_date else None,
+            "estimatedEffort": float(t.estimated_effort_hours or 0.0),
+            "actualEffort": float(t.actual_effort_hours or 0.0),
+            "remainingEffort": max(0.0, float(t.estimated_effort_hours or 0.0) - float(t.actual_effort_hours or 0.0)),
+            "status": t.status or "In Progress",
+            "timingStatus": timing_status,
+            "sentBy": t.created_by_name or "",
+            "completedDate": t.completed_at.isoformat() if t.completed_at else None,
+            "completionRemarks": t.completion_remarks or "",
+            "blockedReason": t.blocked_reason or ""
+        })
+
+    # Format job documents list (queryable in pgAdmin 4)
+    formatted_docs = []
+    for d in all_job_docs:
+        formatted_docs.append({
+            "id": d.id,
+            "fileName": getattr(d, "original_name", None) or d.file_name,
+            "originalName": getattr(d, "original_name", None) or d.file_name,
+            "filePath": d.file_path,
+            "fileUrl": f"/api/jobs/{job.id}/documents/{d.id}/download",
+            "staticUrl": getattr(d, "file_url", "") or f"/uploads/{job.id}/{d.file_name}",
+            "fileSize": float(getattr(d, "file_size_kb", 0) or 0),
+            "documentType": d.document_type or "Specification Document",
+            "department": d.department or "general",
+            "uploadedBy": d.uploaded_by or "User",
+            "uploadedAt": d.uploaded_at.isoformat() if d.uploaded_at else None
         })
 
     # Prepare response payload
@@ -2010,12 +2370,18 @@ async def get_job_workflow_state(
             "quantity": job.qty or "1",
             "currentDepartment": curr_dept,
             "responsibleEngineer": job.responsible_engg_name or "",
+            "previousResponsibleEngineer": getattr(job, "previous_responsible_engg_name", "") or "",
+            "returnReason": getattr(job, "return_reason", "") or getattr(job, "handover_return_reason", "") or "",
+            "returnComment": getattr(job, "return_comment", "") or "",
+            "returnedBy": getattr(job, "returned_by", "") or "",
+            "returnedAt": job.returned_at.isoformat() if getattr(job, "returned_at", None) else None,
             "originalDate": job.date or "",
             "expectedDate": job.expected_date.isoformat() if getattr(job, "expected_date", None) else getattr(job, "delivery_date", None)
         },
         "ownership": {
             "department": curr_dept,
             "responsibleEngineer": job.responsible_engg_name or "",
+            "previousResponsibleEngineer": getattr(job, "previous_responsible_engg_name", "") or "",
             "assignedUser": job.assigned_user_name or (active_task.assigned_user_name if active_task else ""),
             "assignedUserId": job.assigned_user_id,
             "currentStatus": curr_status
@@ -2034,13 +2400,16 @@ async def get_job_workflow_state(
             "completedDate": active_task.completed_at.isoformat() if active_task and active_task.completed_at else None,
             "completionRemarks": active_task.completion_remarks if active_task else ""
         } if active_task else None,
+        "departmentTasks": formatted_tasks,
+        "documents": formatted_docs,
         "readiness": readiness,
+        "isReadyForHandover": is_fully_ready,
         "primaryAction": {
             "type": primary_action,
             "action": primary_action,
             "canAccept": bool(curr_status == "Pending Acceptance" and user_belongs_to_curr_dept),
             "canReturn": bool(curr_status == "Pending Acceptance" and user_belongs_to_curr_dept),
-            "canHandover": bool(curr_status == "In Progress" and active_task and active_task.status.lower() == "completed" and bool(readiness.get("isFullyReady", False))),
+            "canHandover": bool(curr_status == "In Progress" and is_fully_ready and user_belongs_to_curr_dept),
             "isCallerDept": user_belongs_to_curr_dept
         },
         "incomingHandover": {
@@ -2459,6 +2828,75 @@ async def direct_assign_department_task(
 
     return {"success": True, "message": f"Task directly assigned to {assigned_user_name}"}
 
+# POST /api/jobs/{id}/tasks
+@router.post("/{id}/tasks")
+async def create_job_task(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    task_name = (body.get("taskName") or body.get("title") or "").strip()
+    if not task_name:
+        raise HTTPException(status_code=400, detail="Task title is required")
+
+    curr_dept = (job.current_department or "marketing").lower()
+    dept = (body.get("department") or curr_dept).lower()
+    assigned_user = (body.get("assignedUser") or body.get("assigned_user_name") or job.responsible_engg_name or user.name or user.username).strip()
+    est_hours = float(body.get("estimatedEffort") or body.get("estimated_effort_hours") or 8.0)
+    instructions = (body.get("instructions") or body.get("description") or "").strip()
+
+    t_start = date.today()
+    t_due = date.today() + timedelta(days=5)
+    if body.get("targetDate"):
+        try:
+            t_due = datetime.strptime(str(body["targetDate"])[:10], "%Y-%m-%d").date()
+        except Exception:
+            pass
+
+    new_task = DepartmentTask(
+        job_id=job.id,
+        department=dept,
+        task_name=task_name,
+        assigned_user_name=assigned_user,
+        created_by_user_id=user.id,
+        created_by_name=user.name or user.username,
+        description=instructions,
+        start_date=t_start,
+        target_date=t_due,
+        estimated_effort_hours=est_hours,
+        actual_effort_hours=0.0,
+        progress_percentage=0,
+        status="In Progress"
+    )
+    db.add(new_task)
+
+    activity = DepartmentActivity(
+        job_id=job.id,
+        department=dept,
+        action="TASK_CREATED",
+        new_value={"task_name": task_name, "assigned_to": assigned_user, "target_date": str(t_due)},
+        updated_by=user.name or user.username
+    )
+    db.add(activity)
+
+    await db.commit()
+    await db.refresh(new_task)
+    return {"success": True, "task": {
+        "id": new_task.id,
+        "taskName": new_task.task_name,
+        "department": new_task.department,
+        "assignedUser": new_task.assigned_user_name,
+        "targetDate": str(new_task.target_date),
+        "estimatedEffort": new_task.estimated_effort_hours,
+        "status": new_task.status
+    }}
+
 # GET /api/jobs/department-tasks/my-tasks
 @router.get("/department-tasks/my-tasks")
 async def get_department_my_tasks(
@@ -2522,6 +2960,8 @@ async def get_department_my_tasks(
             "taskName": t.task_name,
             "department": t.department,
             "assignedUser": t.assigned_user_name,
+            "sentBy": getattr(t, "created_by_name", None) or "Marketing",
+            "sentByDepartment": "marketing" if t.department != "marketing" else "system",
             "startDate": t.start_date.isoformat() if t.start_date else None,
             "targetDate": t.target_date.isoformat() if t.target_date else None,
             "estimatedEffort": float(t.estimated_effort_hours or 0),
@@ -2554,6 +2994,9 @@ async def handover_to_next_department(
     target_dept = (body.get("targetDepartment") or "design").lower()
     resp_engg = (body.get("responsibleEngineer") or job.responsible_engg_name or "").strip()
     notes = (body.get("notes") or body.get("handoverNote") or "").strip()
+    tasks_payload = body.get("tasks") or []
+    if not tasks_payload and body.get("task"):
+        tasks_payload = [body.get("task")]
 
     from_dept = (job.current_department or "marketing").lower()
 
@@ -2594,6 +3037,74 @@ async def handover_to_next_department(
         status_at_handover="Pending Acceptance"
     )
     db.add(handover_record)
+    await db.flush()
+
+    # Rule 2: Create DepartmentTask(s) for the receiving department
+    target_dept_norm = normalize_dept_key(target_dept)
+    if tasks_payload:
+        for t_item in tasks_payload:
+            t_title = t_item.get("taskTitle") or t_item.get("taskName") or DEFAULT_DEPARTMENT_TASKS.get(target_dept_norm, f"{target_dept.capitalize()} Review & Preparation")
+            t_assigned = t_item.get("assignedTo") or resp_engg
+            t_start = date.today()
+            t_due = date.today() + timedelta(days=5)
+            if t_item.get("targetDate"):
+                try:
+                    t_due = datetime.strptime(str(t_item["targetDate"])[:10], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+            if t_item.get("startDate"):
+                try:
+                    t_start = datetime.strptime(str(t_item["startDate"])[:10], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+
+            new_task = DepartmentTask(
+                job_id=job.id,
+                department=target_dept_norm,
+                task_name=t_title,
+                assigned_user_name=t_assigned,
+                created_by_user_id=user.id,
+                created_by_name=user.name or user.username,
+                description=t_item.get("instructions") or t_item.get("description") or f"Handed over by {user.name or user.username} ({from_dept.capitalize()})",
+                start_date=t_start,
+                target_date=t_due,
+                estimated_effort_hours=float(t_item.get("estimatedEffort") or 8.0),
+                actual_effort_hours=0.0,
+                progress_percentage=0,
+                status="In Progress"
+            )
+            db.add(new_task)
+    else:
+        # Default fallback task
+        new_task = DepartmentTask(
+            job_id=job.id,
+            department=target_dept_norm,
+            task_name=DEFAULT_DEPARTMENT_TASKS.get(target_dept_norm, f"{target_dept.capitalize()} Review & Preparation"),
+            assigned_user_name=resp_engg or f"{target_dept.capitalize()} Team",
+            created_by_user_id=user.id,
+            created_by_name=user.name or user.username,
+            description=f"Handed over by {user.name or user.username} ({from_dept.capitalize()})",
+            start_date=date.today(),
+            target_date=date.today() + timedelta(days=5),
+            estimated_effort_hours=8.0,
+            actual_effort_hours=0.0,
+            progress_percentage=0,
+            status="In Progress"
+        )
+        db.add(new_task)
+
+    # Link selected or existing documents for this job to the handover record
+    selected_doc_ids = body.get("selectedDocumentIds") or body.get("selected_document_ids") or []
+    if selected_doc_ids:
+        docs_stmt = select(JobDocument).where(JobDocument.id.in_(selected_doc_ids))
+        docs_res = await db.execute(docs_stmt)
+        for doc_item in docs_res.scalars().all():
+            doc_item.handover_id = handover_record.id
+    else:
+        docs_stmt = select(JobDocument).where(JobDocument.job_id == job.id, JobDocument.handover_id.is_(None))
+        docs_res = await db.execute(docs_stmt)
+        for doc_item in docs_res.scalars().all():
+            doc_item.handover_id = handover_record.id
 
     # Update job stage & ownership
     job.current_department = target_dept
@@ -2634,3 +3145,362 @@ async def handover_to_next_department(
         "currentDepartment": target_dept,
         "status": "Pending Acceptance"
     }
+
+# =========================================================================
+# DOCUMENTS API (PostgreSQL job_documents table & pgAdmin 4 queryable)
+# =========================================================================
+
+# POST /api/jobs/{id}/documents/upload
+@router.post("/{id}/documents/upload")
+async def upload_job_document(
+    id: int,
+    file: UploadFile = File(...),
+    document_type: str = Form("GENERAL"),
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_upload_dir = os.path.join(UPLOAD_DIR, str(job.id))
+    os.makedirs(job_upload_dir, exist_ok=True)
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    orig_filename = os.path.basename(file.filename)
+    safe_filename = f"{uuid.uuid4().hex[:8]}_{orig_filename}"
+    file_path = os.path.join(job_upload_dir, safe_filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    file_size = os.path.getsize(file_path)
+    file_size_kb = round(file_size / 1024.0, 2)
+    file_url = f"/uploads/{job.id}/{safe_filename}"
+
+    user_dept = user.departments[0] if user.departments else "marketing"
+    doc = JobDocument(
+        job_id=job.id,
+        job_no=job.job_no,
+        document_type=document_type.upper(),
+        file_name=safe_filename,
+        original_name=orig_filename,
+        file_path=file_path,
+        file_url=file_url,
+        file_size_kb=file_size_kb,
+        mime_type=file.content_type or "application/pdf",
+        uploaded_by=user.name or user.username,
+        department=user_dept
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    return {
+        "success": True,
+        "document": {
+            "id": doc.id,
+            "jobId": doc.job_id,
+            "jobNo": doc.job_no,
+            "documentType": doc.document_type,
+            "originalName": doc.original_name,
+            "fileName": doc.file_name,
+            "fileUrl": doc.file_url,
+            "fileSizeKb": float(doc.file_size_kb or 0),
+            "uploadedBy": doc.uploaded_by,
+            "uploadedAt": doc.uploaded_at.isoformat() if doc.uploaded_at else None
+        }
+    }
+
+# GET /api/jobs/{id}/documents
+@router.get("/{id}/documents")
+async def get_job_documents(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    stmt = select(JobDocument).where(JobDocument.job_id == job.id).order_by(desc(JobDocument.id))
+    res = await db.execute(stmt)
+    docs = res.scalars().all()
+
+    return [
+        {
+            "id": d.id,
+            "jobId": d.job_id,
+            "jobNo": d.job_no,
+            "documentType": d.document_type,
+            "originalName": d.original_name,
+            "fileUrl": f"/api/jobs/{job.id}/documents/{d.id}/download",
+            "staticUrl": d.file_url or f"/uploads/{job.id}/{d.file_name}",
+            "fileSizeKb": float(d.file_size_kb or 0),
+            "uploadedBy": d.uploaded_by,
+            "uploadedAt": d.uploaded_at.isoformat() if d.uploaded_at else None
+        }
+        for d in docs
+    ]
+
+# GET /api/jobs/{id}/documents/{doc_id}/download
+@router.get("/{id}/documents/{doc_id}/download")
+async def download_job_document(
+    id: int,
+    doc_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    stmt = select(JobDocument).where(JobDocument.id == doc_id)
+    res = await db.execute(stmt)
+    doc = res.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document record not found")
+
+    # Locate physical file with candidate paths
+    file_path = doc.file_path
+    if not (file_path and os.path.exists(file_path)):
+        candidate1 = os.path.join(UPLOAD_DIR, str(job.id), doc.file_name)
+        candidate2 = os.path.join(LEGACY_UPLOAD_DIR, str(job.id), doc.file_name)
+        if os.path.exists(candidate1):
+            file_path = candidate1
+        elif os.path.exists(candidate2):
+            file_path = candidate2
+        else:
+            raise HTTPException(status_code=404, detail="Physical file not found on disk")
+
+    download_name = doc.original_name or doc.file_name
+    return FileResponse(
+        path=file_path,
+        filename=download_name,
+        media_type=doc.mime_type or "application/octet-stream"
+    )
+
+# =========================================================================
+# INCOMING JOBS INBOX API (For ALL Users across All Departments)
+# =========================================================================
+
+# GET /api/jobs/incoming/list
+@router.get("/incoming/list")
+async def get_incoming_jobs(
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    is_admin = is_admin_or_keval(user)
+    user_depts = [normalize_dept_key(d) for d in (user.departments or [])]
+
+    stmt = select(Job).where(Job.current_workflow_status == "Pending Acceptance")
+    if not is_admin:
+        stmt = stmt.where(
+            or_(*[func.lower(Job.current_department) == ud for ud in user_depts])
+        )
+    stmt = stmt.order_by(desc(Job.id))
+    res = await db.execute(stmt)
+    jobs_list = res.scalars().all()
+
+    results = []
+    for j in jobs_list:
+        # Get latest pending handover
+        h_stmt = select(JobHandover).where(
+            JobHandover.job_id.in_([j.id, j.external_id]),
+            JobHandover.is_current_pending.is_(True)
+        ).order_by(desc(JobHandover.id))
+        h_res = await db.execute(h_stmt)
+        handover = h_res.scalars().first()
+
+        # Get attached documents from PostgreSQL job_documents
+        doc_stmt = select(JobDocument).where(JobDocument.job_id == j.id).order_by(desc(JobDocument.id))
+        doc_res = await db.execute(doc_stmt)
+        docs = doc_res.scalars().all()
+
+        # Get tasks created for this department
+        t_stmt = select(DepartmentTask).where(
+            DepartmentTask.job_id == j.id,
+            DepartmentTask.department == normalize_dept_key(j.current_department)
+        ).order_by(desc(DepartmentTask.id))
+        t_res = await db.execute(t_stmt)
+        tasks = t_res.scalars().all()
+
+        results.append({
+            "jobId": j.id,
+            "externalId": j.external_id,
+            "jobNo": j.job_no,
+            "clientName": j.client_name or "",
+            "projectName": j.project_name or "",
+            "panelName": j.panel_name or "",
+            "currentDepartment": j.current_department,
+            "responsibleEngineer": j.responsible_engg_name or "",
+            "handover": {
+                "id": handover.id if handover else None,
+                "fromDepartment": handover.from_department if handover else "marketing",
+                "sentBy": handover.performed_by if handover else (tasks[0].created_by_name if tasks else "System"),
+                "handedOverAt": handover.created_at.isoformat() if handover and getattr(handover, "created_at", None) else None,
+                "note": handover.notes if handover else "",
+                "responsibleEngineer": handover.responsible_engg_name if handover else j.responsible_engg_name
+            } if handover else None,
+            "documents": [
+                {
+                    "id": d.id,
+                    "originalName": d.original_name,
+                    "documentType": d.document_type,
+                    "fileUrl": f"/api/jobs/{j.id}/documents/{d.id}/download",
+                    "staticUrl": d.file_url or f"/uploads/{j.id}/{d.file_name}",
+                    "fileSizeKb": float(d.file_size_kb or 0),
+                    "uploadedBy": d.uploaded_by
+                }
+                for d in docs
+            ],
+            "tasks": [
+                {
+                    "id": t.id,
+                    "taskName": t.task_name,
+                    "assignedUser": t.assigned_user_name,
+                    "startDate": t.start_date.isoformat() if t.start_date else None,
+                    "targetDate": t.target_date.isoformat() if t.target_date else None,
+                    "estimatedEffort": float(t.estimated_effort_hours or 0),
+                    "status": t.status,
+                    "instructions": t.description or ""
+                }
+                for t in tasks
+            ]
+        })
+
+    return {"incomingJobs": results, "count": len(results)}
+
+# GET /api/jobs/incoming/count
+@router.get("/incoming/count")
+async def get_incoming_jobs_count(
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    is_admin = is_admin_or_keval(user)
+    user_depts = [normalize_dept_key(d) for d in (user.departments or [])]
+
+    stmt = select(func.count(Job.id)).where(Job.current_workflow_status == "Pending Acceptance")
+    if not is_admin:
+        stmt = stmt.where(
+            or_(*[func.lower(Job.current_department) == ud for ud in user_depts])
+        )
+    res = await db.execute(stmt)
+    count_val = res.scalar() or 0
+    return {"count": count_val}
+
+# POST /api/jobs/{id}/incoming/accept
+@router.post("/{id}/incoming/accept")
+async def accept_incoming_job(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    user_name = user.name or user.username
+    now = datetime.now(timezone.utc)
+
+    h_stmt = select(JobHandover).where(
+        JobHandover.job_id.in_([job.id, job.external_id]),
+        JobHandover.is_current_pending.is_(True)
+    )
+    h_res = await db.execute(h_stmt)
+    handover = h_res.scalars().first()
+    if handover:
+        handover.is_current_pending = False
+        handover.status_at_handover = "Accepted"
+        setattr(handover, "accepted_by", user_name)
+        setattr(handover, "accepted_at", now)
+
+    job.current_workflow_status = "In Progress"
+    job.handover_status = f"Accepted by {job.current_department.capitalize()}"
+    job.current_action = f"Working on {job.current_department.capitalize()} stage"
+
+    # Update tasks status to In Progress
+    t_stmt = select(DepartmentTask).where(
+        DepartmentTask.job_id == job.id,
+        DepartmentTask.department == normalize_dept_key(job.current_department)
+    )
+    t_res = await db.execute(t_stmt)
+    for t in t_res.scalars().all():
+        if t.status in ["Pending Review", "Open"]:
+            t.status = "In Progress"
+
+    await db.commit()
+    await db.refresh(job)
+
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+        "event": "JOB_ACCEPTED",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "department": job.current_department,
+        "acceptedBy": user_name
+    })
+
+    return {"success": True, "message": f"Job accepted by {user_name}"}
+
+# POST /api/jobs/{id}/incoming/return
+@router.post("/{id}/incoming/return")
+async def return_incoming_job(
+    id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserPayload = Depends(get_current_user)
+):
+    job = await find_job_by_id(db, id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    body = await safe_json_body(request)
+    reason_cat = body.get("reasonCategory") or body.get("reason") or "Missing Technical Information"
+    remarks = (body.get("remarks") or body.get("comment") or "").strip()
+
+    user_name = user.name or user.username
+    now = datetime.now(timezone.utc)
+
+    h_stmt = select(JobHandover).where(
+        JobHandover.job_id.in_([job.id, job.external_id]),
+        JobHandover.is_current_pending.is_(True)
+    )
+    h_res = await db.execute(h_stmt)
+    handover = h_res.scalars().first()
+
+    return_to_dept = handover.from_department if handover else "marketing"
+    if handover:
+        handover.is_current_pending = False
+        handover.status_at_handover = f"Returned to {return_to_dept.capitalize()}"
+        handover.notes = f"{handover.notes}\n[RETURN REASON: {reason_cat}] {remarks}"
+
+    job.current_department = return_to_dept
+    job.current_workflow_status = "Needs Clarification"
+    job.handover_status = f"Returned to {return_to_dept.capitalize()}"
+    job.handover_return_reason = reason_cat
+    job.handover_return_comment = remarks
+    job.current_action = f"Clarification required by {return_to_dept.capitalize()}"
+
+    # Mark department tasks as Blocked / Returned (DO NOT DELETE)
+    t_stmt = select(DepartmentTask).where(
+        DepartmentTask.job_id == job.id,
+        DepartmentTask.department == normalize_dept_key(user.departments[0] if user.departments else "design")
+    )
+    t_res = await db.execute(t_stmt)
+    for t in t_res.scalars().all():
+        t.status = "Blocked / Returned"
+        t.blocked_reason = f"Returned: {reason_cat} - {remarks}"
+
+    await db.commit()
+    await db.refresh(job)
+
+    await broadcaster.broadcast("JOB_STATUS_CHANGED", {
+        "event": "CLARIFICATION_REQUESTED",
+        "jobId": job.external_id,
+        "jobNo": job.job_no,
+        "returnedTo": return_to_dept,
+        "reason": reason_cat
+    })
+
+    return {"success": True, "message": f"Job returned to {return_to_dept.capitalize()}"}

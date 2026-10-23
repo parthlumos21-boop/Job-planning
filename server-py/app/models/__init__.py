@@ -8,6 +8,7 @@ class Account(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(100), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
+    password = Column(String(255), default="password123")
     role = Column(String(50), default="user")
     departments = Column(ARRAY(String), default=[])
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -27,6 +28,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(Integer, unique=True, index=True)
     name = Column(String(255), nullable=False)
+    password = Column(String(255), default="password123")
     departments = Column(ARRAY(String), default=[])
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -97,6 +99,12 @@ class Job(Base):
     handover_submitted_at = Column(DateTime(timezone=True), nullable=True)
     handover_accepted_at = Column(DateTime(timezone=True), nullable=True)
     handover_return_reason = Column(Text, nullable=True)
+    previous_responsible_engg_name = Column(String(255), default="")
+    return_reason = Column(String(100), nullable=True)
+    return_comment = Column(Text, nullable=True)
+    returned_by = Column(String(100), nullable=True)
+    returned_at = Column(DateTime(timezone=True), nullable=True)
+    reassignment_history = Column(JSONB, default=list)
     handover_checklist = Column(JSONB, default=dict)
     attachments = Column(JSONB, default=list)
 
@@ -133,6 +141,15 @@ class Job(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    @property
+    def responsible_engineer(self):
+        return self.responsible_engg_name or ""
+
+    @responsible_engineer.setter
+    def responsible_engineer(self, value):
+        self.responsible_engg_name = str(value or "")
+
 
 class JobExecutionSession(Base):
     __tablename__ = "job_execution_sessions"
@@ -174,6 +191,8 @@ class JobHandover(Base):
     target_assigned_user_id = Column(Integer, nullable=True)
     target_assigned_user_name = Column(String(255), default="")
     responsible_engg_name = Column(String(255), default="")
+    previous_responsible_engg_name = Column(String(255), default="")
+    reassignment_reason = Column(String(255), nullable=True)
     is_current_pending = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -364,5 +383,23 @@ class DepartmentTask(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class JobDocument(Base):
+    __tablename__ = "job_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_no = Column(String(100), nullable=False, index=True)
+    document_type = Column(String(50), nullable=False, default="GENERAL") # 'PO', 'CUSTOMER_DRAWING', 'PANEL_SPECIFICATION', 'GENERAL'
+    file_name = Column(String(255), nullable=False)
+    original_name = Column(String(255), nullable=False)
+    file_path = Column(Text, nullable=False)
+    file_url = Column(String(255), nullable=False)
+    file_size_kb = Column(Numeric(10, 2), default=0.00)
+    mime_type = Column(String(100), default="application/pdf")
+    uploaded_by = Column(String(255), nullable=False)
+    department = Column(String(50), nullable=False, default="marketing")
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    handover_id = Column(Integer, ForeignKey("job_handovers.id", ondelete="SET NULL"), nullable=True)
 
 

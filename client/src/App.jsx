@@ -16,6 +16,8 @@ import AdminOversightDashboard from './dashboard/AdminOversightDashboard';
 import LiveActivityDashboard from './dashboard/LiveActivityDashboard';
 import SearchJobsPage from './jobs/SearchJobsPage';
 import DepartmentMyTasksPage from './jobs/DepartmentMyTasksPage';
+import IncomingJobsPage from './jobs/IncomingJobsPage';
+import UserManagementPage from './users/UserManagementPage';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -37,6 +39,14 @@ function KevalOnlyRoute({ children }) {
   return isKeval ? children : <Navigate to="/" replace />;
 }
 
+function RootRedirect() {
+  const { user } = useAuth();
+  const role = (user?.role || '').toLowerCase();
+  const username = (user?.username || '').toLowerCase();
+  const isAdmin = role === 'admin' || role === 'executive' || role === 'superadmin' || username === 'keval v shah' || username === 'keval' || username === 'kevalvshah';
+  return <Navigate to={isAdmin ? "/admin/dashboard" : "/dashboard"} replace />;
+}
+
 function JobsRoute() {
   return <JobList title="All Jobs Master Data" />;
 }
@@ -48,7 +58,12 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<RootRedirect />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="admin/dashboard" element={<AdminOnlyRoute><Dashboard /></AdminOnlyRoute>} />
+            <Route path="admin/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
+            <Route path="admin/late-jobs" element={<AdminOnlyRoute><AdminOversightDashboard /></AdminOnlyRoute>} />
+            <Route path="incoming-jobs" element={<IncomingJobsPage />} />
             <Route path="search-jobs" element={<SearchJobsPage />} />
             <Route path="my-tasks" element={<DepartmentMyTasksPage />} />
             <Route path="my-jobs" element={<MyJobs />} />
@@ -61,7 +76,6 @@ function App() {
             <Route path="chart" element={<AdminOnlyRoute><ChartPage /></AdminOnlyRoute>} />
             <Route path="live-activity" element={<KevalOnlyRoute><LiveActivityDashboard /></KevalOnlyRoute>} />
             <Route path="live-monitor" element={<AdminOnlyRoute><KevalDashboard /></AdminOnlyRoute>} />
-            <Route path="admin/dashboard" element={<AdminOnlyRoute><AdminOversightDashboard /></AdminOnlyRoute>} />
             <Route path="reports" element={<AdminOnlyRoute><Reports /></AdminOnlyRoute>} />
           </Route>
         </Routes>

@@ -5,11 +5,13 @@ import api from '../services/api';
 import {
   Briefcase, Clock, AlertTriangle, ArrowRightLeft, PlusCircle, Search,
   RefreshCw, CheckCircle2, ChevronRight, ChevronLeft, FileSpreadsheet,
-  FileText, UserCheck, Shield, Sparkles, Filter, X, ArrowUpRight, CheckSquare,
-  ArrowRight
+  FileText, UserCheck, Shield, Sparkles, Filter, X, ArrowUpRight
 } from 'lucide-react';
 import { cleanJobNo, getHandoverAccountability, isMarketingLead } from '../config/marketingFormConfig';
 import SimpleHandoverModal from '../jobs/SimpleHandoverModal';
+import ReHandoverModal from '../jobs/modals/ReHandoverModal';
+import ReassignEngineerModal from '../jobs/modals/ReassignEngineerModal';
+import SearchJobsSection from '../components/SearchJobsSection';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -21,6 +23,9 @@ export default function MarketingJobDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [jobs, setJobs] = useState([]);
+  const [globalJobs, setGlobalJobs] = useState([]);
+  const [selectedGlobalDept, setSelectedGlobalDept] = useState('all');
+  const [globalLoading, setGlobalLoading] = useState(false);
   const [stats, setStats] = useState({
     activeJobs: 0,
     dueSoon: 0,
@@ -36,11 +41,13 @@ export default function MarketingJobDashboard() {
     jobsBlockedByTasksCount: 0
   });
   const [recentActivity, setRecentActivity] = useState([]);
-  const [scope, setScope] = useState('all'); // 'all' or 'my'
+  const [scope, setScope] = useState('all'); // default to all
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [handoverModalJob, setHandoverModalJob] = useState(null);
+  const [reassignModalJob, setReassignModalJob] = useState(null);
+  const [reHandoverModalJob, setReHandoverModalJob] = useState(null);
   const [showActivityFeed, setShowActivityFeed] = useState(false);
 
   const isLead = isMarketingLead(user);
@@ -72,6 +79,24 @@ export default function MarketingJobDashboard() {
   useEffect(() => {
     fetchDashboardData();
   }, [scope]);
+
+  const fetchGlobalJobs = async () => {
+    try {
+      setGlobalLoading(true);
+      const deptParam = selectedGlobalDept !== 'all' ? `?department=${selectedGlobalDept}` : '';
+      const res = await api.get(`/jobs${deptParam}`);
+      const raw = res.data?.jobs || (Array.isArray(res.data) ? res.data : []);
+      setGlobalJobs(raw);
+    } catch (e) {
+      console.error('Failed to load global jobs:', e);
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchGlobalJobs();
+  }, [selectedGlobalDept]);
 
   // Reset to page 1 whenever search, activeFilter, or scope changes
   useEffect(() => {
@@ -232,53 +257,29 @@ export default function MarketingJobDashboard() {
     <div className="space-y-6 pb-12">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Marketing Job Dashboard
-            </h1>
-            <button
-              onClick={fetchDashboardData}
-              disabled={refreshing}
-              className={`p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all ${
-                refreshing ? 'animate-spin' : ''
-              }`}
-              title="Refresh Live Data"
-            >
-              <RefreshCw size={17} />
-            </button>
-          </div>
-          <p className="text-sm text-slate-500 mt-1 font-medium">
-            Internal Marketing Job Register, Purchase Orders & Design Handover
-          </p>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+            Welcome, {user?.name || user?.username || 'Marketing User'}
+          </h1>
+          <button
+            onClick={fetchDashboardData}
+            disabled={refreshing}
+            className={`p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all cursor-pointer ${
+              refreshing ? 'animate-spin' : ''
+            }`}
+            title="Refresh Live Data"
+          >
+            <RefreshCw size={18} />
+          </button>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Scope Toggle (All Marketing Users) */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-700">
-            <button
-              onClick={() => setScope('all')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                scope === 'all' ? 'bg-white text-indigo-700 shadow-xs' : 'hover:text-slate-900'
-              }`}
-            >
-              All Team Jobs
-            </button>
-            <button
-              onClick={() => setScope('my')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                scope === 'my' ? 'bg-white text-indigo-700 shadow-xs' : 'hover:text-slate-900'
-              }`}
-            >
-              My Assigned
-            </button>
-          </div>
 
           {/* Activity Feed Trigger */}
           {isLead && recentActivity.length > 0 && (
             <button
               onClick={() => setShowActivityFeed(!showActivityFeed)}
-              className="inline-flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3.5 py-2.5 rounded-xl border border-indigo-200 transition-all text-xs"
+              className="inline-flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3.5 py-2.5 rounded-xl border border-indigo-200 transition-all text-xs cursor-pointer"
             >
               <Sparkles size={15} />
               Team Activity ({recentActivity.length})
@@ -290,7 +291,7 @@ export default function MarketingJobDashboard() {
             <button
               onClick={handleDownloadReport}
               disabled={downloadingReport}
-              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs hover:shadow transition-all text-xs disabled:opacity-50"
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs hover:shadow transition-all text-xs disabled:opacity-50 cursor-pointer"
               title="Download Full Marketing Register Excel Report"
             >
               {downloadingReport ? (
@@ -305,34 +306,11 @@ export default function MarketingJobDashboard() {
           {/* Create Job */}
           <button
             onClick={() => navigate('/jobs/new')}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-xs hover:shadow transition-all text-xs"
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-xs hover:shadow transition-all text-xs cursor-pointer"
           >
             <PlusCircle size={16} />
             Create New Job
           </button>
-        </div>
-      </div>
-
-      {/* User Welcome Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-4 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/30 rounded-xl text-indigo-300">
-            {isLead ? <Shield size={20} /> : <UserCheck size={20} />}
-          </div>
-          <div>
-            <h2 className="text-sm font-bold tracking-tight">
-              {isLead
-                ? `Marketing Control & Activity Center (${user?.name || user?.username || 'mktadmin'})`
-                : `Welcome, ${user?.name || user?.username || 'Marketing User'}`}
-            </h2>
-            <p className="text-xs text-indigo-200 font-medium">
-              Manage client projects, track purchase orders, and transfer validated job packages to Design.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 self-start sm:self-auto">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          Live Database Connected
         </div>
       </div>
 
@@ -443,344 +421,54 @@ export default function MarketingJobDashboard() {
         </div>
       </div>
 
-      {/* Marketing Tasks & Effort Summary Banner */}
-      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-blue-500/20 border border-blue-400/30 rounded-2xl text-blue-300">
-            <CheckSquare size={24} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold tracking-tight">Marketing My Tasks & Effort</h3>
-              {taskSummary.openTasks > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/40 text-[10px] font-bold text-blue-200">
-                  {taskSummary.openTasks} Open
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Track your scheduled deadlines, required effort, and tasks blocking job readiness.
-            </p>
-          </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-4 bg-white/10 backdrop-blur-xs px-4 py-2 rounded-2xl border border-white/10 text-xs">
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Due Today</span>
-              <span className="text-sm font-black text-amber-300">{taskSummary.dueToday}</span>
-            </div>
-            <div className="h-6 w-px bg-white/20"></div>
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Overdue</span>
-              <span className={`text-sm font-black ${taskSummary.overdue > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
-                {taskSummary.overdue}
-              </span>
-            </div>
-            <div className="h-6 w-px bg-white/20"></div>
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">Est. Effort</span>
-              <span className="text-sm font-black text-blue-200">{taskSummary.totalEstimatedHours}h</span>
-            </div>
-          </div>
 
-          <button
-            onClick={() => navigate('/my-tasks')}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-slate-900 hover:bg-blue-50 text-xs font-bold transition-all shadow-sm"
-          >
-            <span>Open My Tasks</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
-      </div>
+      {/* Global Cross-Department Search & Multi-Team Directory */}
+      <SearchJobsSection
+        jobs={globalJobs}
+        loading={globalLoading}
+        onRefresh={fetchGlobalJobs}
+        isAdmin={true}
+        selectedDept={selectedGlobalDept}
+        onDeptChange={(newDept) => setSelectedGlobalDept(newDept)}
+        userDeptName="Global Master"
+        onHandoverClick={(job) => setHandoverModalJob(job)}
+      />
 
-      {/* Search & 7 Real Workflow Status Filter Tabs */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs space-y-3">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* 100% Case-Insensitive Search Input across 5 fields */}
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by Job No (e.g. RA101/01, 21), Customer, Project, Panel, Engineer..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                title="Clear Search"
-              >
-                <X size={15} />
-              </button>
-            )}
-          </div>
 
-          {search && (
-            <div className="text-xs text-slate-500 font-semibold flex items-center gap-1.5 whitespace-nowrap">
-              <span>Found <strong className="text-indigo-600">{filteredJobs.length}</strong> matching records</span>
-            </div>
-          )}
-        </div>
-
-      </div>
-
-      {/* Internal Marketing Table (10 Requested Core Fields) */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-black text-slate-900 tracking-tight">
-              Marketing Jobs Directory
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Showing {filteredJobs.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1} to{' '}
-              {Math.min(currentPage * ITEMS_PER_PAGE, filteredJobs.length)} of {filteredJobs.length} authorized marketing records
-            </p>
-          </div>
-          {search && (
-            <button
-              onClick={() => { setSearch(''); setActiveFilter('all'); }}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-bold self-start sm:self-auto"
-            >
-              Reset Filters
-            </button>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="py-20 text-center text-slate-400 text-sm">
-            <RefreshCw size={26} className="animate-spin mx-auto mb-2 text-indigo-600" />
-            Loading live marketing records...
-          </div>
-        ) : filteredJobs.length === 0 ? (
-          <div className="py-16 px-4 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
-              <Search size={22} />
-            </div>
-            <p className="text-sm font-bold text-slate-800">No marketing jobs found</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              {search
-                ? `No jobs match "${search}" with the "${activeFilter.replace(/_/g, ' ')}" filter.`
-                : 'No jobs are currently available in this filter stage.'}
-            </p>
-            {(search || activeFilter !== 'all') && (
-              <button
-                onClick={() => { setSearch(''); setActiveFilter('all'); }}
-                className="mt-4 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-xs font-bold transition-all"
-              >
-                Clear Search & Filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-3.5 whitespace-nowrap">Job Number</th>
-                  <th className="py-3 px-3.5 whitespace-nowrap">Project Name</th>
-                  <th className="py-3 px-3.5 whitespace-nowrap">Customer</th>
-                  <th className="py-3 px-3.5 whitespace-nowrap">Panel Name</th>
-                  <th className="py-3 px-3.5 whitespace-nowrap">Engineer</th>
-                  <th className="py-3 px-3 whitespace-nowrap">Expected Date</th>
-                  <th className="py-3 px-3.5 whitespace-nowrap">Status</th>
-                  <th className="py-3 px-3.5 whitespace-nowrap">Next Action</th>
-                  <th className="py-3 px-3.5 text-right whitespace-nowrap">View</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedJobs.map((job) => {
-                  const isHandedOver = (job.handoverStatus || '').toLowerCase().includes('submitted');
-                  const isReturned = (job.handoverStatus || '').toLowerCase().includes('returned') || Boolean(job.handoverReturnReason);
-                  const isCompleted =
-                    (job.lifecycleStatus || '').toLowerCase() === 'completed' ||
-                    job.actualEndAt !== null;
-
-                  return (
-                    <tr key={job.id} className="hover:bg-blue-50/40 transition-colors">
-                      {/* 1. Job Number (Clean display without #) */}
-                      <td className="py-3 px-3.5 font-black text-blue-700 text-xs whitespace-nowrap">
-                        <button
-                          onClick={() => navigate(`/jobs/${job.id}`)}
-                          className="hover:underline hover:text-blue-900 flex items-center gap-1 font-bold"
-                          title="Open Job Details"
-                        >
-                          {cleanJobNo(job.jobNo)}
-                        </button>
-                      </td>
-
-                      {/* 2. Project Name */}
-                      <td className="py-3 px-3.5 text-slate-700 max-w-[180px] truncate" title={job.projectName}>
-                        {job.projectName || '—'}
-                      </td>
-
-                      {/* 3. Customer */}
-                      <td className="py-3 px-3.5 font-bold text-slate-900 max-w-[180px] truncate" title={job.clientName}>
-                        {job.clientName || 'General Client'}
-                      </td>
-
-                      {/* 4. Panel Name */}
-                      <td className="py-3 px-3.5 font-semibold text-slate-800 max-w-[180px] truncate" title={job.panelName}>
-                        <div>{job.panelName || 'Standard Panel'}</div>
-                        {job.qty && job.qty !== '1' && (
-                          <span className="text-[10px] text-slate-400">Qty: {job.qty}</span>
-                        )}
-                      </td>
-
-                      {/* 5. Engineer */}
-                      <td className="py-3 px-3.5 font-medium text-slate-800 whitespace-nowrap">
-                        {job.responsibleEnggName ? (
-                          <span className="inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                            {job.responsibleEnggName}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 italic">Not Assigned</span>
-                        )}
-                      </td>
-
-                      {/* 6. Expected Date */}
-                      <td className="py-3 px-3 text-slate-900 font-bold whitespace-nowrap">
-                        {job.deliveryDate || (job.stageDueDate ? job.stageDueDate.slice(0, 10) : '—')}
-                      </td>
-
-                      {/* 7. Status */}
-                      <td className="py-3 px-3.5 whitespace-nowrap">
-                        {isCompleted ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
-                            <CheckCircle2 size={11} /> Completed
-                          </span>
-                        ) : isReturned ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800">
-                            <AlertTriangle size={11} /> Returned
-                          </span>
-                        ) : isHandedOver ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-800">
-                            <ArrowRightLeft size={11} /> In Design
-                          </span>
-                        ) : job.dataGivenToDesign ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800">
-                            Ready to Release
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
-                            <Clock size={11} /> In Marketing
-                          </span>
-                        )}
-                      </td>
-
-                      {/* 8. Next Action */}
-                      <td className="py-3 px-3.5 whitespace-nowrap">
-                        {!isCompleted && !isHandedOver ? (
-                          <button
-                            onClick={() => setHandoverModalJob(job)}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold transition-all text-xs flex items-center gap-1"
-                            title="Handover to Design"
-                          >
-                            <ArrowRightLeft size={12} />
-                            Handover →
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => navigate(`/jobs/edit/${job.id}`)}
-                            className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold transition-all text-xs"
-                            title="Update Job Data"
-                          >
-                            Update
-                          </button>
-                        )}
-                      </td>
-
-                      {/* 9. View */}
-                      <td className="py-3 px-3.5 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => navigate(`/jobs/${job.id}`)}
-                          className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all text-xs shadow-2xs hover:shadow-xs"
-                          title="Open Job Details"
-                        >
-                          Open
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Strict Pagination Controls (10 records per page) */}
-        {filteredJobs.length > 0 && (
-          <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="text-xs text-slate-500 font-medium">
-              Showing <span className="font-bold text-slate-800">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> to{' '}
-              <span className="font-bold text-slate-800">{Math.min(currentPage * ITEMS_PER_PAGE, filteredJobs.length)}</span> of{' '}
-              <span className="font-bold text-slate-800">{filteredJobs.length}</span> entries (Page {currentPage} of {totalPages})
-            </div>
-
-            <div className="flex items-center gap-1 self-center sm:self-auto">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold flex items-center gap-1 transition-all"
-              >
-                <ChevronLeft size={14} />
-                Previous
-              </button>
-
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((p) => {
-                    if (totalPages <= 7) return true;
-                    if (p === 1 || p === totalPages) return true;
-                    if (Math.abs(p - currentPage) <= 1) return true;
-                    return false;
-                  })
-                  .map((p, idx, arr) => {
-                    const prev = arr[idx - 1];
-                    const showEllipsis = prev && p - prev > 1;
-                    return (
-                      <React.Fragment key={p}>
-                        {showEllipsis && (
-                          <span className="px-1 text-slate-400 text-xs font-bold">...</span>
-                        )}
-                        <button
-                          onClick={() => setCurrentPage(p)}
-                          className={`w-7 h-7 rounded-lg text-xs font-black transition-all ${
-                            currentPage === p
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      </React.Fragment>
-                    );
-                  })}
-              </div>
-
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold flex items-center gap-1 transition-all"
-              >
-                Next
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Simple & Unique Handover Modal */}
+      {/* Simple Handover Modal */}
       {handoverModalJob && (
         <SimpleHandoverModal
           job={handoverModalJob}
           isOpen={Boolean(handoverModalJob)}
           onClose={() => setHandoverModalJob(null)}
           onSuccess={handleHandoverSuccess}
+        />
+      )}
+
+      {/* Reassign Engineer Modal */}
+      {reassignModalJob && (
+        <ReassignEngineerModal
+          job={reassignModalJob}
+          isOpen={Boolean(reassignModalJob)}
+          onClose={() => setReassignModalJob(null)}
+          onSuccess={(updatedJob) => {
+            handleHandoverSuccess(updatedJob);
+            setReassignModalJob(null);
+          }}
+        />
+      )}
+
+      {/* Re-Handover Modal */}
+      {reHandoverModalJob && (
+        <ReHandoverModal
+          job={reHandoverModalJob}
+          isOpen={Boolean(reHandoverModalJob)}
+          onClose={() => setReHandoverModalJob(null)}
+          onSuccess={(updatedJob) => {
+            handleHandoverSuccess(updatedJob);
+            setReHandoverModalJob(null);
+          }}
         />
       )}
     </div>

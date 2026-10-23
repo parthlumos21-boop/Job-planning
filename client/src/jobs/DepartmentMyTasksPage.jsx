@@ -153,11 +153,7 @@ export default function DepartmentMyTasksPage() {
     e.preventDefault();
     if (!activeTask) return;
 
-    const prog = parseInt(progressInput, 10);
-    if (isNaN(prog) || prog < 0 || prog > 100) {
-      setModalError('Completion percentage must be between 0% and 100%.');
-      return;
-    }
+    const prog = statusInput === 'Completed' ? 100 : (activeTask.progress && activeTask.progress > 0 ? activeTask.progress : 50);
 
     const sessionHrs = sessionHoursInput ? parseFloat(sessionHoursInput) : 0.0;
     if (sessionHrs < 0) {
@@ -178,7 +174,7 @@ export default function DepartmentMyTasksPage() {
         taskId: activeTask.id,
         progress: prog,
         sessionHours: sessionHrs,
-        status: prog >= 100 ? 'Completed' : statusInput,
+        status: statusInput,
         completionRemarks: remarksInput.trim(),
         blockedReason: statusInput === 'Blocked' ? blockedReasonInput.trim() : ''
       });
@@ -372,7 +368,6 @@ export default function DepartmentMyTasksPage() {
                   <th className="py-3 px-3.5">Timeline</th>
                   <th className="py-3 px-3.5">Effort (Est / Act)</th>
                   <th className="py-3 px-3.5">Remaining</th>
-                  <th className="py-3 px-3.5">Progress</th>
                   <th className="py-3 px-3.5">Status</th>
                   <th className="py-3 px-3.5 text-right">Actions</th>
                 </tr>
@@ -400,6 +395,11 @@ export default function DepartmentMyTasksPage() {
                             {t.taskName}
                           </span>
                         </div>
+                        {t.sentBy && (
+                          <div className="text-[11px] font-semibold text-indigo-600 mt-0.5 flex items-center gap-1">
+                            <span>📨 Sent by: <strong>{t.sentBy}</strong> ({t.sentByDepartment || 'Marketing'})</span>
+                          </div>
+                        )}
                         <div className="text-[11px] text-slate-400 truncate max-w-[260px] mt-0.5">
                           {t.panelName || 'Standard Panel'}
                         </div>
@@ -456,21 +456,6 @@ export default function DepartmentMyTasksPage() {
                         <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs">
                           {remainingEffort}h
                         </span>
-                      </td>
-
-                      {/* Progress % */}
-                      <td className="py-3 px-3.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                isCompleted ? 'bg-emerald-500' : 'bg-indigo-600'
-                              }`}
-                              style={{ width: `${t.progress || 0}%` }}
-                            />
-                          </div>
-                          <span className="text-[11px] font-black text-slate-700">{t.progress || 0}%</span>
-                        </div>
                       </td>
 
                       {/* Status */}
@@ -579,28 +564,6 @@ export default function DepartmentMyTasksPage() {
                 </div>
               </div>
 
-              {/* 1. Progress Percentage */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Task Progress: <span className="text-indigo-600">{progressInput}%</span>
-                  </label>
-                  <span className="text-[11px] text-slate-400">0% (Not Started) to 100% (Completed)</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={progressInput}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10);
-                    setProgressInput(val);
-                    if (val >= 100) setStatusInput('Completed');
-                  }}
-                  className="w-full cursor-pointer accent-indigo-600"
-                />
-              </div>
 
               {/* 2. Session Hours Worked (Logged incrementally without overwriting estimates) */}
               <div>

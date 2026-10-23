@@ -6,10 +6,13 @@ import {
   ArrowLeft, Edit3, ArrowRightLeft, Send, CheckCircle2, Clock, AlertTriangle,
   Briefcase, Calendar, UserCheck, Layers, FileText, ShoppingCart, History,
   ShieldCheck, Phone, MapPin, Truck, Package, Eye, ChevronRight, RefreshCw,
-  CheckSquare, Plus, Check, X, AlertCircle, UserPlus, Cpu, Wrench
+  CheckSquare, Plus, Check, X, AlertCircle, UserPlus, Cpu, Wrench, Download,
+  Upload, FileUp, Folder
 } from 'lucide-react';
 import { cleanJobNo, isMarketingUser, isMarketingLead } from '../config/marketingFormConfig';
 import SimpleHandoverModal from './SimpleHandoverModal';
+import ReassignEngineerModal from './modals/ReassignEngineerModal';
+import ReHandoverModal from './modals/ReHandoverModal';
 import { DEPARTMENT_USER_OPTIONS } from './departmentUserOptions';
 
 const DEPT_PROGRESS_STEPS = [
@@ -36,18 +39,34 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
   const [clarificationReason, setClarificationReason] = useState('Missing Technical Information');
   const [clarificationRemarks, setClarificationRemarks] = useState('');
 
+  // Task Update State (Strictly Zero Sliders)
   const [taskUpdateOpen, setTaskUpdateOpen] = useState(false);
-  const [progressInput, setProgressInput] = useState(0);
+  const [editingTask, setEditingTask] = useState(null);
   const [sessionHoursInput, setSessionHoursInput] = useState('');
   const [statusInput, setStatusInput] = useState('In Progress');
   const [remarksInput, setRemarksInput] = useState('');
   const [blockedReasonInput, setBlockedReasonInput] = useState('');
   const [isCompletingTask, setIsCompletingTask] = useState(false);
 
+  // Add Task Modal State
+  const [addTaskOpen, setAddTaskOpen] = useState(false);
+  const [taskNameInput, setTaskNameInput] = useState('');
+  const [taskAssigneeInput, setTaskAssigneeInput] = useState('');
+  const [taskTargetDateInput, setTaskTargetDateInput] = useState('');
+  const [taskEstimatedEffortInput, setTaskEstimatedEffortInput] = useState('4');
+  const [taskInstructionsInput, setTaskInstructionsInput] = useState('');
+
+  // Document Upload State
+  const [uploadDocOpen, setUploadDocOpen] = useState(false);
+  const [docFile, setDocFile] = useState(null);
+  const [docType, setDocType] = useState('CUSTOMER_DRAWING');
+
   const [directAssignOpen, setDirectAssignOpen] = useState(false);
   const [assigneeName, setAssigneeName] = useState('');
   const [directTaskName, setDirectTaskName] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [reHandoverModalOpen, setReHandoverModalOpen] = useState(false);
 
   // Tabs for detailed view beneath 8 core workflow sections
   const [activeTab, setActiveTab] = useState('overview');
@@ -118,15 +137,11 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
     }
   };
 
-  // Handle Update My Task
+  // Handle Update Task (No progress sliders - hours & status only)
   const handleSaveTask = async (e) => {
     e.preventDefault();
-    if (!workflowState?.myTask) return;
-    const prog = isCompletingTask ? 100 : Number(progressInput);
-    if (prog < 0 || prog > 100) {
-      alert('Progress percentage must be between 0% and 100%');
-      return;
-    }
+    const targetTask = editingTask || workflowState?.myTask;
+    if (!targetTask) return;
     const sessHrs = sessionHoursInput ? Number(sessionHoursInput) : 0;
     if (sessHrs < 0) {
       alert('Session hours worked cannot be negative');
@@ -139,17 +154,70 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
     try {
       setActionLoading(true);
       await api.patch(`/jobs/${id}/workflow/my-task`, {
-        taskId: workflowState.myTask.id,
-        progress: prog,
+        taskId: targetTask.id,
+        progress: (statusInput === 'Completed' || isCompletingTask) ? 100 : 50,
         sessionHours: sessHrs,
         completionRemarks: remarksInput.trim(),
         status: isCompletingTask ? 'Completed' : statusInput,
         blockedReason: statusInput === 'Blocked' ? blockedReasonInput.trim() : ''
       });
       setTaskUpdateOpen(false);
+      setEditingTask(null);
       await fetchWorkflowState();
     } catch (err) {
       alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Handle Add Task to Department
+  const handleAddTaskSubmit = async (e) => {
+    e.preventDefault();
+    if (!taskNameInput.trim()) {
+      alert('Please enter a task name');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      await api.post(`/jobs/${id}/tasks`, {
+        taskName: taskNameInput.trim(),
+        assignedUser: taskAssigneeInput.trim() || undefined,
+        targetDate: taskTargetDateInput || undefined,
+        estimatedEffort: taskEstimatedEffortInput ? Number(taskEstimatedEffortInput) : 4,
+        instructions: taskInstructionsInput.trim() || undefined
+      });
+      setAddTaskOpen(false);
+      setTaskNameInput('');
+      setTaskInstructionsInput('');
+      await fetchWorkflowState();
+    } catch (err) {
+      alert('Failed to create task: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Handle Document Upload (pgAdmin 4 job_documents table)
+  const handleUploadDocSubmit = async (e) => {
+    e.preventDefault();
+    if (!docFile) {
+      alert('Please select a file to upload');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const formData = new FormData();
+      formData.append('file', docFile);
+      formData.append('document_type', docType);
+      await api.post(`/jobs/${id}/documents/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setUploadDocOpen(false);
+      setDocFile(null);
+      await fetchWorkflowState();
+    } catch (err) {
+      alert('Failed to upload document: ' + (err.response?.data?.detail || err.message));
     } finally {
       setActionLoading(false);
     }
@@ -193,12 +261,23 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
           <AlertTriangle size={28} />
         </div>
         <h2 className="text-lg font-bold text-slate-900">{error || 'Job Not Accessible'}</h2>
-        <button
-          onClick={() => navigate('/my-jobs')}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs"
-        >
-          <ArrowLeft size={14} /> Back to My Jobs
-        </button>
+        <p className="text-xs text-slate-500">
+          This job may not exist, has been removed, or is not assigned to your department.
+        </p>
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button
+            onClick={() => navigate('/my-jobs')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs"
+          >
+            <ArrowLeft size={14} /> Back to My Jobs
+          </button>
+          <button
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+          >
+            Dashboard
+          </button>
+        </div>
       </div>
     );
   }
@@ -287,9 +366,62 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
           {isAdmin && onSwitchToAdmin && (
             <button
               onClick={onSwitchToAdmin}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
             >
               Control Center View
+            </button>
+          )}
+
+          {/* 1. Add Task Button */}
+          {(isAdmin || isCallerDept) && (
+            <button
+              onClick={() => {
+                setTaskAssigneeInput(ownership?.assignedUser || deptUserCandidates[0] || '');
+                setTaskTargetDateInput('');
+                setTaskEstimatedEffortInput('4');
+                setAddTaskOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
+            >
+              <Plus size={14} />
+              <span>+ Add Task</span>
+            </button>
+          )}
+
+          {/* 2. Reassign User Button */}
+          {(isAdmin || isCallerDept) && (
+            <button
+              onClick={() => setReassignModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all shadow-xs cursor-pointer"
+            >
+              <UserCheck size={14} className="text-blue-600" />
+              <span>Reassign User</span>
+            </button>
+          )}
+
+          {/* 3. Request Clarification Button */}
+          {(isAdmin || isCallerDept) && (
+            <button
+              onClick={() => setClarificationOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 transition-all shadow-xs cursor-pointer"
+            >
+              <AlertTriangle size={14} />
+              <span>Request Clarification</span>
+            </button>
+          )}
+
+          {/* 4. Handover -> Button */}
+          {(isAdmin || isCallerDept) && (
+            <button
+              onClick={() => setHandoverModalOpen(true)}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer ${
+                workflowState?.isReadyForHandover
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-500/30'
+                  : 'bg-slate-800 hover:bg-slate-900 text-white'
+              }`}
+            >
+              <Send size={13} />
+              <span>Handover →</span>
             </button>
           )}
 
@@ -299,11 +431,69 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all shadow-xs"
             >
               <Edit3 size={14} />
-              <span>Edit Specifications</span>
+              <span>Edit Specs</span>
             </button>
           )}
         </div>
       </div>
+
+      {/* RETURNED FROM DESIGN ALERT BANNER */}
+      {(jobInfo?.returnReason || currentStatus === 'Needs Clarification' || (job.handoverStatus || '').toLowerCase().includes('returned')) && (
+        <div className="bg-rose-50 border-2 border-rose-200 rounded-2xl p-5 shadow-xs animate-in fade-in space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-rose-100 text-rose-700 rounded-xl shrink-0 mt-0.5">
+                <AlertTriangle size={22} />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-rose-800 bg-rose-200/60 px-2.5 py-0.5 rounded-full">
+                    Returned to Marketing
+                  </span>
+                  {jobInfo?.returnedBy && (
+                    <span className="text-xs text-rose-700 font-semibold">
+                      by <strong>{jobInfo.returnedBy}</strong>
+                    </span>
+                  )}
+                  {jobInfo?.returnedAt && (
+                    <span className="text-xs text-rose-500">
+                      • {new Date(jobInfo.returnedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="text-sm font-black text-rose-950">
+                  Return Reason: {jobInfo?.returnReason || job.handoverReturnReason || 'Missing Technical Information'}
+                </h3>
+
+                {jobInfo?.returnComment && (
+                  <p className="text-xs text-rose-800 font-medium bg-white/80 p-3 rounded-xl border border-rose-200/80">
+                    "{jobInfo.returnComment}"
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+              {(isAdmin || isMarketingUser(user)) && (
+                <button
+                  onClick={() => setReassignModalOpen(true)}
+                  className="px-3 py-1.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Reassign Engineer
+                </button>
+              )}
+              <button
+                onClick={() => setReHandoverModalOpen(true)}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                <Send size={13} />
+                Re-Handover to Design
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 2. JOB PROGRESS STEPPER */}
@@ -347,97 +537,176 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. JOB INFORMATION & 4. CURRENT OWNERSHIP (Admin Only - Untouched) */}
+      {/* 2. READY FOR HANDOVER ENGINE & CHECKLIST BANNER */}
       {/* ========================================================================= */}
-      {isAdmin && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* 3. JOB INFORMATION */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                3. Job Information
-              </h3>
-              <span className="text-[11px] font-bold text-slate-400">Master Record</span>
+      {workflowState?.isReadyForHandover ? (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-5 sm:p-6 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider">
+              <CheckCircle2 size={13} />
+              <span>Ready for Handover</span>
             </div>
-
-            <div className="grid grid-cols-2 gap-3.5 text-xs">
-              <div>
-                <span className="text-slate-400 block font-medium">Customer</span>
-                <span className="font-bold text-slate-900 mt-0.5 block">{jobInfo?.customer || '—'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block font-medium">Project</span>
-                <span className="font-bold text-slate-900 mt-0.5 block">{jobInfo?.project || '—'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block font-medium">Panel Name & Rating</span>
-                <span className="font-bold text-slate-900 mt-0.5 block">{jobInfo?.panelName || '—'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block font-medium">Quantity</span>
-                <span className="font-black text-slate-900 mt-0.5 block">{jobInfo?.quantity || 1} Unit</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block font-medium">Original Date</span>
-                <span className="font-semibold text-slate-700 mt-0.5 block">{jobInfo?.originalDate || '—'}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block font-medium">Expected Date</span>
-                <span className="font-black text-slate-900 mt-0.5 block">{jobInfo?.expectedDate || '—'}</span>
-              </div>
-            </div>
+            <h2 className="text-lg sm:text-xl font-black tracking-tight">
+              All Department Requirements Satisfied
+            </h2>
+            <p className="text-xs text-emerald-50 font-medium max-w-xl">
+              All tasks are completed, required specifications & drawings are stored in PostgreSQL, and responsible accountability is confirmed. Click below to transfer responsibility to the next department.
+            </p>
           </div>
 
-          {/* 4. CURRENT OWNERSHIP */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                4. Current Ownership
+          <button
+            onClick={() => setHandoverModalOpen(true)}
+            className="px-5 py-3 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-black rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          >
+            <Send size={15} />
+            <span>Handover to Next Department →</span>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <span>Readiness Engine & Handover Checklist</span>
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {readiness?.score || '0/4'} Requirements Met
+                </span>
               </h3>
-              <span className="text-[11px] font-bold text-blue-600 uppercase">{ownership?.department}</span>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Complete these departmental requirements to unlock job transfer to the next department.
+              </p>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-                <div>
-                  <span className="text-slate-400 text-[11px] block font-semibold">Active Department</span>
-                  <span className="font-black text-slate-900 text-sm capitalize">{ownership?.department}</span>
-                </div>
-                <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">Stage Owner</span>
-              </div>
+            <button
+              onClick={() => setHandoverModalOpen(true)}
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer self-start sm:self-auto flex items-center gap-1.5"
+            >
+              <Send size={12} />
+              <span>Open Handover Window</span>
+            </button>
+          </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-slate-400 text-[11px] block font-semibold">Responsible Engineer</span>
-                  <span className="font-bold text-indigo-700 mt-0.5 block truncate">
-                    {ownership?.responsibleEngineer || 'Unassigned'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">Technical Accountability</span>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-slate-400 text-[11px] block font-semibold">Assigned User</span>
-                  <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                    {ownership?.assignedUser || 'Queue (Pending Accept)'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">Current Task Executor</span>
-                </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Tasks */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              readiness?.requirements?.find(r => r.key === 'tasks_completed')?.ready
+                ? 'bg-emerald-50/70 border-emerald-200'
+                : 'bg-amber-50/60 border-amber-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">1. Tasks</span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                  readiness?.requirements?.find(r => r.key === 'tasks_completed')?.ready
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {readiness?.requirements?.find(r => r.key === 'tasks_completed')?.ready ? 'Complete' : 'Pending'}
+                </span>
               </div>
+              <p className="text-xs font-bold text-slate-800 mt-1">
+                {workflowState?.departmentTasks?.filter(t => (t.status || '').toLowerCase() === 'completed').length || 0} / {workflowState?.departmentTasks?.length || 0} Done
+              </p>
+              {!readiness?.requirements?.find(r => r.key === 'tasks_completed')?.ready && (
+                <button
+                  onClick={() => {
+                    setTaskAssigneeInput(ownership?.assignedUser || deptUserCandidates[0] || '');
+                    setAddTaskOpen(true);
+                  }}
+                  className="mt-2 text-[11px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus size={12} /> Add Task
+                </button>
+              )}
+            </div>
 
-              <div className="flex items-center justify-between text-xs pt-1">
-                <span className="font-semibold text-slate-500">Current Status:</span>
-                <span className="font-bold text-slate-800">{ownership?.currentStatus}</span>
+            {/* 2. Documents */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              readiness?.requirements?.find(r => r.key === 'documents_available')?.ready
+                ? 'bg-emerald-50/70 border-emerald-200'
+                : 'bg-amber-50/60 border-amber-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">2. Documents</span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                  readiness?.requirements?.find(r => r.key === 'documents_available')?.ready
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {readiness?.requirements?.find(r => r.key === 'documents_available')?.ready ? 'Ready' : 'Pending'}
+                </span>
               </div>
+              <p className="text-xs font-bold text-slate-800 mt-1">
+                {workflowState?.documents?.length || 0} Stored in pgAdmin 4
+              </p>
+              <button
+                onClick={() => setUploadDocOpen(true)}
+                className="mt-2 text-[11px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Upload size={12} /> Upload Document
+              </button>
+            </div>
+
+            {/* 3. Responsible Engineer */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              readiness?.requirements?.find(r => r.key === 'responsible_assigned')?.ready
+                ? 'bg-emerald-50/70 border-emerald-200'
+                : 'bg-amber-50/60 border-amber-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">3. Accountability</span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                  readiness?.requirements?.find(r => r.key === 'responsible_assigned')?.ready
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {readiness?.requirements?.find(r => r.key === 'responsible_assigned')?.ready ? 'Assigned' : 'Missing'}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-800 mt-1 truncate">
+                {ownership?.responsibleEngineer || 'Unassigned'}
+              </p>
+              <button
+                onClick={() => setReassignModalOpen(true)}
+                className="mt-2 text-[11px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <UserCheck size={12} /> Assign / Reassign
+              </button>
+            </div>
+
+            {/* 4. Target Date */}
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              readiness?.requirements?.find(r => r.key === 'target_date_defined')?.ready
+                ? 'bg-emerald-50/70 border-emerald-200'
+                : 'bg-amber-50/60 border-amber-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">4. Target Date</span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                  readiness?.requirements?.find(r => r.key === 'target_date_defined')?.ready
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {readiness?.requirements?.find(r => r.key === 'target_date_defined')?.ready ? 'Defined' : 'Missing'}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-800 mt-1">
+                {jobInfo?.expectedDate || '—'}
+              </p>
+              <button
+                onClick={() => navigate(`/jobs/edit/${job.id}`)}
+                className="mt-2 text-[11px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Edit3 size={12} /> Edit Date
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* 3. MY TASK & WORK EXECUTION (Structured & Modernized for Regular Users) */}
+      {/* 3. DEPARTMENT TASKS & WORK EXECUTION (Planned vs Actual Hours - ZERO SLIDERS) */}
       {/* ========================================================================= */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-        {/* Card Header Strip */}
         <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-50/70 to-white">
           <div>
             <div className="flex items-center gap-2">
@@ -445,422 +714,413 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
                 <CheckSquare size={16} />
               </span>
               <h3 className="text-base font-black text-slate-900 tracking-tight">
-                {isAdmin ? '5. My Task & Work Execution' : '3. My Task & Work Execution'}
+                3. Department Tasks & Execution
               </h3>
-              {myTask && (
-                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide border ${
-                  myTask.status === 'Completed'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : myTask.status === 'Blocked'
-                    ? 'bg-rose-50 text-rose-700 border-rose-200'
-                    : 'bg-blue-50 text-blue-700 border-blue-200'
-                }`}>
-                  {myTask.status}
-                </span>
-              )}
+              <span className="text-xs font-semibold text-slate-400">
+                ({workflowState?.departmentTasks?.length || 0} Tasks)
+              </span>
             </div>
             <p className="text-xs text-slate-500 mt-1 font-medium">
-              Active engineering task for <strong className="text-slate-700 capitalize">{ownership?.department}</strong> department. Complete work and log effort hours.
+              Real engineering work in <strong className="text-slate-700 capitalize">{ownership?.department}</strong>. Log session effort hours and transition statuses.
             </p>
           </div>
 
-          {isCallerDept && (
-            <button
-              onClick={() => {
-                setAssigneeName(ownership?.assignedUser || '');
-                setDirectTaskName(myTask?.taskName || '');
-                setDirectAssignOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all shadow-xs"
-            >
-              <UserPlus size={14} className="text-blue-600" />
-              <span>Direct Assign</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {isCallerDept && (
+              <button
+                onClick={() => {
+                  setTaskAssigneeInput(ownership?.assignedUser || deptUserCandidates[0] || '');
+                  setTaskTargetDateInput('');
+                  setTaskEstimatedEffortInput('4');
+                  setAddTaskOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>+ Add Task</span>
+              </button>
+            )}
+
+            {isCallerDept && (
+              <button
+                onClick={() => {
+                  setAssigneeName(ownership?.assignedUser || '');
+                  setDirectTaskName(myTask?.taskName || '');
+                  setDirectAssignOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all shadow-xs cursor-pointer"
+              >
+                <UserPlus size={14} className="text-blue-600" />
+                <span>Quick Reassign Task</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {myTask ? (
-          <div className="p-5 sm:p-6 space-y-6">
-            {/* Task Overview Card */}
-            <div className="bg-slate-50/80 rounded-xl p-4 sm:p-5 border border-slate-200/70 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-blue-600 bg-blue-50/80 px-2.5 py-0.5 rounded-md border border-blue-200/60">
-                      {myTask.department} Task
-                    </span>
-                    {myTask.targetedDate && myTask.targetedDate < new Date().toISOString().split('T')[0] && myTask.status !== 'Completed' && (
-                      <span className="text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 text-[10px] uppercase tracking-wider">
-                        Overdue
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-lg font-black text-slate-900 tracking-tight mt-1.5">
-                    {myTask.taskName || 'Department Engineering Task'}
-                  </h4>
-                  <div className="flex items-center gap-2 text-xs text-slate-600 mt-1 font-medium">
-                    <UserCheck size={14} className="text-slate-400" />
-                    <span>Assigned Engineer:</span>
-                    <strong className="text-slate-900 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
-                      {myTask.assignedUser || ownership?.assignedUser || 'Unassigned'}
-                    </strong>
-                  </div>
-                </div>
+        {/* Tasks List */}
+        <div className="p-5 sm:p-6 space-y-4">
+          {workflowState?.departmentTasks && workflowState.departmentTasks.length > 0 ? (
+            <div className="space-y-3.5">
+              {workflowState.departmentTasks.map((t) => {
+                const isTaskDone = (t.status || '').toLowerCase() === 'completed';
+                const isTaskBlocked = (t.status || '').toLowerCase() === 'blocked';
 
-                {/* Progress Circle / Bar Indicator */}
-                <div className="w-full md:w-56 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs">
-                  <div className="flex items-center justify-between text-xs font-bold mb-1.5">
-                    <span className="text-slate-500">Progress</span>
-                    <span className={`text-sm font-black ${myTask.status === 'Completed' ? 'text-emerald-600' : 'text-blue-600'}`}>
-                      {myTask.progress}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200/60">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        myTask.status === 'Completed' ? 'bg-emerald-500' : 'bg-blue-600'
-                      }`}
-                      style={{ width: `${Math.min(100, Math.max(0, myTask.progress || 0))}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
+                return (
+                  <div
+                    key={t.id}
+                    className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                      isTaskDone
+                        ? 'bg-slate-50/60 border-slate-200/70'
+                        : isTaskBlocked
+                        ? 'bg-rose-50/40 border-rose-200'
+                        : 'bg-white border-slate-200/90 shadow-2xs'
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                      {/* Left: Task Info */}
+                      <div className="space-y-2 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide border ${
+                            isTaskDone
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : isTaskBlocked
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            {t.status || 'In Progress'}
+                          </span>
 
-              {/* Timeline & Effort Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200/60">
-                <div className="bg-white p-3 rounded-xl border border-slate-200/70">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Start Date</span>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Calendar size={13} className="text-slate-400" />
-                    <span className="text-xs font-bold text-slate-800">{myTask.startDate || 'Today'}</span>
-                  </div>
-                </div>
+                          {/* Timing Status Badge */}
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            t.timingStatus === 'Overdue'
+                              ? 'bg-rose-100 text-rose-800'
+                              : t.timingStatus === 'Completed'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {t.timingStatus || 'On Time'}
+                          </span>
 
-                <div className="bg-white p-3 rounded-xl border border-slate-200/70">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Target Due Date</span>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Clock size={13} className="text-slate-400" />
-                    <span className="text-xs font-bold text-slate-800">{myTask.targetedDate || '—'}</span>
-                  </div>
-                </div>
+                          <span className="text-xs text-slate-400 font-medium">
+                            • Dept: <strong className="text-slate-700 capitalize">{t.department}</strong>
+                          </span>
 
-                <div className="bg-white p-3 rounded-xl border border-slate-200/70">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Effort Logged</span>
-                  <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-sm font-black text-blue-600">{myTask.actualEffort || 0}h</span>
-                    <span className="text-[11px] font-semibold text-slate-400">/ {myTask.estimatedEffort || 0}h est</span>
-                  </div>
-                </div>
+                          {t.sentBy && (
+                            <span className="text-xs text-slate-400 font-medium">
+                              • Created by: <strong className="text-slate-600">{t.sentBy}</strong>
+                            </span>
+                          )}
+                        </div>
 
-                <div className="bg-white p-3 rounded-xl border border-slate-200/70">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Remaining Effort</span>
-                  <div className="mt-1">
-                    <span className="inline-block text-xs font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                      {Math.max(0, Number(myTask.estimatedEffort || 0) - Number(myTask.actualEffort || 0))}h remaining
-                    </span>
+                        <h4 className="text-base font-black text-slate-900 tracking-tight">
+                          {t.taskName}
+                        </h4>
+
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
+                          <div className="flex items-center gap-1.5">
+                            <UserCheck size={14} className="text-slate-400" />
+                            <span>Assigned: <strong>{t.assignedUser || 'Department Team'}</strong></span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <Calendar size={14} className="text-slate-400" />
+                            <span>Target Date: <strong>{t.targetDate || 'Flexible'}</strong></span>
+                          </div>
+                        </div>
+
+                        {t.blockedReason && (
+                          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2">
+                            <AlertCircle size={15} className="text-rose-600 shrink-0 mt-0.5" />
+                            <div>
+                              <strong className="block text-rose-800">Blocker Reason:</strong>
+                              <span>{t.blockedReason}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {t.completionRemarks && (
+                          <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 font-medium">
+                            <strong className="text-slate-700">Remarks: </strong>
+                            {t.completionRemarks}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Right: Hours & Action buttons */}
+                      <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end justify-between gap-3 shrink-0">
+                        {/* Effort Box */}
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs text-slate-700 min-w-[200px]">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
+                            <span>Planned: <strong>{t.estimatedEffort || 0}h</strong></span>
+                            <span>Actual Logged: <strong className="text-blue-600">{t.actualEffort || 0}h</strong></span>
+                          </div>
+                          <div className="text-[11px] font-bold text-amber-700 bg-amber-50/80 px-2 py-0.5 rounded border border-amber-200/70 text-center">
+                            Remaining: {Math.max(0, Number(t.estimatedEffort || 0) - Number(t.actualEffort || 0))}h
+                          </div>
+                        </div>
+
+                        {/* Task Action Buttons */}
+                        {isCallerDept && !isTaskDone && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingTask(t);
+                                setSessionHoursInput('');
+                                setStatusInput(t.status || 'In Progress');
+                                setRemarksInput(t.completionRemarks || '');
+                                setBlockedReasonInput(t.blockedReason || '');
+                                setIsCompletingTask(false);
+                                setTaskUpdateOpen(true);
+                              }}
+                              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
+                            >
+                              Log Hours & Status
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEditingTask(t);
+                                setSessionHoursInput('');
+                                setStatusInput('Completed');
+                                setRemarksInput(t.completionRemarks || '');
+                                setBlockedReasonInput('');
+                                setIsCompletingTask(true);
+                                setTaskUpdateOpen(true);
+                              }}
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                              <CheckCircle2 size={13} />
+                              <span>Complete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
-
-            {/* Remarks / Blockers if present */}
-            {myTask.blockedReason && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2.5">
-                <AlertCircle size={16} className="text-rose-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block text-rose-800">Task Blocked Reason:</span>
-                  <span className="font-medium mt-0.5 block">{myTask.blockedReason}</span>
-                </div>
+          ) : (
+            <div className="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                <CheckSquare size={22} />
               </div>
-            )}
-
-            {myTask.completionRemarks && (
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs text-slate-700 space-y-1">
-                <span className="font-bold text-slate-800 block text-[11px] uppercase tracking-wider">Completion Remarks:</span>
-                <p className="font-medium">{myTask.completionRemarks}</p>
-              </div>
-            )}
-
-            {/* Task Action Buttons */}
-            {isCallerDept && myTask.status !== 'Completed' && (
-              <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <h4 className="text-sm font-bold text-slate-800">No Active Tasks Yet</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Create clear tasks for your department to assign responsible engineers, log session hours, and achieve handover readiness.
+              </p>
+              {isCallerDept && (
                 <button
                   onClick={() => {
-                    setProgressInput(myTask.progress || 0);
-                    setSessionHoursInput('');
-                    setStatusInput(myTask.status || 'In Progress');
-                    setRemarksInput(myTask.completionRemarks || '');
-                    setBlockedReasonInput(myTask.blockedReason || '');
-                    setIsCompletingTask(false);
-                    setTaskUpdateOpen(true);
+                    setTaskAssigneeInput(ownership?.assignedUser || deptUserCandidates[0] || '');
+                    setAddTaskOpen(true);
                   }}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all shadow-xs"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
-                  Update Progress & Log Hours
+                  <Plus size={14} />
+                  <span>Create First Task</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setProgressInput(100);
-                    setSessionHoursInput('');
-                    setStatusInput('Completed');
-                    setRemarksInput(myTask.completionRemarks || '');
-                    setBlockedReasonInput('');
-                    setIsCompletingTask(true);
-                    setTaskUpdateOpen(true);
-                  }}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5"
-                >
-                  <CheckCircle2 size={15} />
-                  <span>Mark Task as Completed</span>
-                </button>
-              </div>
-            )}
-
-            {!isOwnDepartment && (
-              <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 flex items-center justify-between border border-slate-200/60">
-                <span>Task currently active in <strong>{ownership?.department}</strong>.</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">View-Only</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-8 text-center text-slate-400 text-xs font-medium bg-slate-50 rounded-b-2xl border-t border-slate-100">
-            No active task created yet. Task is generated automatically upon accepting the job.
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. STRUCTURED JOB SPECIFICATIONS (Visible for Regular Department Users) */}
+      {/* 4. JOB DOCUMENTS (Stored in PostgreSQL pgAdmin 4 job_documents table) */}
       {/* ========================================================================= */}
-      {!isAdmin && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Technical Specifications */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="p-1 rounded-md bg-blue-50 text-blue-600"><Cpu size={14} /></div>
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                  4. Technical Specifications
-                </h3>
-              </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Engineering Specs</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Panel Type</span>
-                <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                  {job?.typeOfPanel || jobInfo?.panelName || 'Standard Panel'}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Incomer Rating</span>
-                <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                  {job?.incomerRating || 'Standard Rating'}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Quantity</span>
-                <span className="font-black text-slate-900 mt-0.5 block">
-                  {job?.panelQty || jobInfo?.quantity || 1} Unit(s)
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Industry</span>
-                <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                  {job?.industry || 'Manufacturing'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Commercial & Order Details */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="p-1 rounded-md bg-emerald-50 text-emerald-600"><FileText size={14} /></div>
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                  5. Commercial & Order Details
-                </h3>
-              </div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Purchase Order</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">PO Number</span>
-                <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                  {job?.poNo || '—'}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">PO Date</span>
-                <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                  {job?.poDate || '—'}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Customer</span>
-                <span className="font-bold text-slate-900 mt-0.5 block truncate">
-                  {jobInfo?.customer || job?.customer || '—'}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Expected Date</span>
-                <span className="font-black text-slate-900 mt-0.5 block truncate">
-                  {jobInfo?.expectedDate || job?.expectedDate || '—'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 6. READINESS CHECK (Admin Control Center View Only) */}
-      {/* ========================================================================= */}
-      {isAdmin && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                6. Readiness Check & Validation
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-50/70 to-white">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-indigo-600 text-white shadow-xs">
+                <Folder size={16} />
+              </span>
+              <h3 className="text-base font-black text-slate-900 tracking-tight">
+                4. Job Documents & Drawings
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Mandatory engineering and commercial requirements needed before handover is enabled.
+              <span className="text-xs font-semibold text-slate-400">
+                ({workflowState?.documents?.length || 0} Files in pgAdmin 4)
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 font-medium">
+              Job-level information stored in PostgreSQL table <code className="text-indigo-600 font-bold">job_documents</code>. Sender selects documents during Handover; receiving department gets instant access.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setUploadDocOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
+          >
+            <Upload size={14} />
+            <span>+ Upload Document</span>
+          </button>
+        </div>
+
+        <div className="p-5 sm:p-6">
+          {workflowState?.documents && workflowState.documents.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 uppercase tracking-wider text-[10px] font-bold">
+                    <th className="py-2.5 px-3">File Name</th>
+                    <th className="py-2.5 px-3">Document Type</th>
+                    <th className="py-2.5 px-3">Department</th>
+                    <th className="py-2.5 px-3">Uploaded By</th>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {workflowState.documents.map((doc) => (
+                    <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-3 font-bold text-slate-800 flex items-center gap-2">
+                        <FileText size={16} className="text-blue-600 shrink-0" />
+                        <span className="truncate max-w-xs" title={doc.fileName || doc.originalName}>
+                          {doc.fileName || doc.originalName}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                          {doc.documentType}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 capitalize font-semibold text-slate-600">
+                        {doc.department}
+                      </td>
+                      <td className="py-3 px-3 text-slate-600">
+                        {doc.uploadedBy}
+                      </td>
+                      <td className="py-3 px-3 text-slate-500 text-[11px]">
+                        {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <a
+                          href={doc.fileUrl || `/uploads/${job.id}/${doc.fileName}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-white hover:bg-slate-100 text-blue-600 hover:text-blue-800 font-bold rounded-lg border border-slate-200 shadow-2xs transition-all"
+                        >
+                          <Download size={12} />
+                          <span>View / Download</span>
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <FileText size={22} />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800">No Job Documents Attached</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Upload customer drawings, SLD, Bill of Materials (BOM), or purchase orders. All documents are stored in pgAdmin 4 PostgreSQL.
               </p>
-            </div>
-            <div className="text-right">
-              <span className="text-sm font-black text-blue-600">{readiness?.score || '0/6'}</span>
-              <span className="text-xs text-slate-400 ml-1 font-semibold">Checks Passed</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {(readiness?.requirements || []).map((req, idx) => (
-              <div
-                key={req.key || idx}
-                className={`p-3 rounded-xl border flex items-center justify-between gap-2 text-xs transition-all ${
-                  req.ready
-                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                    req.ready ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-400'
-                  }`}>
-                    {req.ready ? <Check size={12} /> : <X size={12} />}
-                  </div>
-                  <span className="font-semibold">{req.label}</span>
-                </div>
-                <span className={`text-[10px] font-black uppercase tracking-wider ${req.ready ? 'text-emerald-700' : 'text-slate-400'}`}>
-                  {req.ready ? 'Ready' : 'Pending'}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {!readiness?.isFullyReady && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 font-medium">
-                <AlertTriangle size={16} className="text-amber-600 shrink-0" />
-                <span>Some mandatory information is incomplete. Complete required data before handover.</span>
-              </div>
               <button
-                onClick={() => navigate(`/jobs/edit/${job.id}`)}
-                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shrink-0 shadow-xs"
+                onClick={() => setUploadDocOpen(true)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
-                Complete Missing Information
+                <Upload size={14} />
+                <span>Upload First Document</span>
               </button>
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* ========================================================================= */}
-      {/* 7. NEXT ACTION / HANDOVER (Admin Control Center View Only) */}
+      {/* 5. STRUCTURED JOB SPECIFICATIONS & COMMERCIAL DETAILS */}
       {/* ========================================================================= */}
-      {isAdmin && (
-        <div className="p-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl shadow-md space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-blue-400 block">
-                7. Next Primary Action
-              </span>
-              <h3 className="text-lg font-black tracking-tight mt-0.5">
-                {isPendingAcceptance
-                  ? `Incoming Job for ${ownership?.department}`
-                  : isClarification
-                  ? `Clarification Requested by Previous Department`
-                  : myTask?.status === 'Completed' && readiness?.isFullyReady
-                  ? `Ready for Department Handover`
-                  : `Working on Current Department Stage`}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Technical Specifications */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded-md bg-blue-50 text-blue-600"><Cpu size={14} /></div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                5. Technical Specifications
               </h3>
-              <p className="text-xs text-slate-300 mt-1 max-w-xl">
-                {isPendingAcceptance
-                  ? `Received from ${incomingHandover?.fromDepartment || 'previous department'}. Accept to start working and auto-generate task, or return for clarification.`
-                  : isClarification
-                  ? `Review clarification comments, edit required information, and re-handover.`
-                  : myTask?.status === 'Completed' && readiness?.isFullyReady
-                  ? `All requirements complete. Click below to transfer responsibility to the next department.`
-                  : `Complete My Task and verify all readiness checklist items to unlock handover.`}
-              </p>
+            </div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Engineering Specs</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Panel Type</span>
+              <span className="font-bold text-slate-900 mt-0.5 block truncate">
+                {job?.typeOfPanel || jobInfo?.panelName || 'Standard Panel'}
+              </span>
             </div>
 
-            {/* Action Trigger Buttons */}
-            <div className="flex items-center gap-3 shrink-0 flex-wrap">
-              {/* If Pending Acceptance */}
-              {isPendingAcceptance && (
-                <>
-                  <button
-                    onClick={() => setClarificationOpen(true)}
-                    disabled={actionLoading}
-                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
-                  >
-                    Return for Clarification
-                  </button>
-                  <button
-                    onClick={handleAcceptJob}
-                    disabled={actionLoading}
-                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 size={16} />
-                    <span>Accept Job</span>
-                  </button>
-                </>
-              )}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Incomer Rating</span>
+              <span className="font-bold text-slate-900 mt-0.5 block truncate">
+                {job?.incomerRating || 'Standard Rating'}
+              </span>
+            </div>
 
-              {/* If In Progress and Ready for Handover */}
-              {!isPendingAcceptance && (
-                <button
-                  onClick={() => setHandoverModalOpen(true)}
-                  disabled={!readiness?.isFullyReady || myTask?.status !== 'Completed' || actionLoading}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-400 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2"
-                >
-                  <Send size={15} />
-                  <span>
-                    {currentDeptKey === 'marketing'
-                      ? 'Handover to Design'
-                      : currentDeptKey === 'design'
-                      ? 'Handover to Procurement'
-                      : currentDeptKey === 'purchase'
-                      ? 'Handover to Production'
-                      : 'Handover to Next Department'}
-                  </span>
-                </button>
-              )}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Quantity</span>
+              <span className="font-black text-slate-900 mt-0.5 block">
+                {job?.panelQty || jobInfo?.quantity || 1} Unit(s)
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Industry</span>
+              <span className="font-bold text-slate-900 mt-0.5 block truncate">
+                {job?.industry || 'Manufacturing'}
+              </span>
             </div>
           </div>
         </div>
-      )}
+
+        {/* Commercial & Order Details */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded-md bg-emerald-50 text-emerald-600"><FileText size={14} /></div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                Commercial & Order Details
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Purchase Order</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">PO Number</span>
+              <span className="font-bold text-slate-900 mt-0.5 block truncate">
+                {job?.poNo || '—'}
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">PO Date</span>
+              <span className="font-bold text-slate-900 mt-0.5 block truncate">
+                {job?.poDate || '—'}
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Customer</span>
+              <span className="font-bold text-slate-900 mt-0.5 block truncate">
+                {jobInfo?.customer || job?.customer || '—'}
+              </span>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Expected Date</span>
+              <span className="font-black text-slate-900 mt-0.5 block truncate">
+                {jobInfo?.expectedDate || job?.expectedDate || '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ========================================================================= */}
       {/* 6. MY DEPARTMENT HISTORY & AUDIT LOG */}
@@ -890,6 +1150,9 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
                   </div>
                   <p className="text-slate-500 font-medium">
                     Performed by: <strong className="text-slate-800">{h.performedBy || 'System'}</strong>
+                    {h.responsibleEnggName && (
+                      <span className="ml-2 text-indigo-700 font-semibold">• Resp Engg: {h.responsibleEnggName}</span>
+                    )}
                   </p>
                   {h.details && (
                     <p className="text-[11px] text-slate-400 italic">
@@ -980,59 +1243,38 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
         </div>
       )}
 
-      {/* Task Update Modal */}
+      {/* Task Update Modal (Strictly Zero Sliders) */}
       {taskUpdateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4">
             <div>
               <h3 className="text-base font-black text-slate-900">
-                {isCompletingTask ? 'Complete My Task' : 'Update Task Progress'}
+                {isCompletingTask ? 'Complete Task' : 'Log Hours & Update Status'}
               </h3>
-              <p className="text-xs text-slate-500">{myTask?.taskName}</p>
+              <p className="text-xs text-slate-500 font-semibold">{editingTask?.taskName || myTask?.taskName || 'Department Task'}</p>
             </div>
             <form onSubmit={handleSaveTask} className="space-y-3.5">
               {/* Effort Breakdown */}
               <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200/70 text-center text-xs">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Estimated</span>
-                  <span className="font-black text-slate-800">{myTask?.estimatedEffort || 0}h</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Planned</span>
+                  <span className="font-black text-slate-800">{editingTask?.estimatedEffort || myTask?.estimatedEffort || 0}h</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Logged</span>
-                  <span className="font-black text-blue-600">{myTask?.actualEffort || 0}h</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Actual Logged</span>
+                  <span className="font-black text-blue-600">{editingTask?.actualEffort || myTask?.actualEffort || 0}h</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Remaining</span>
                   <span className="font-black text-amber-600">
-                    {Math.max(0, Number(myTask?.estimatedEffort || 0) - Number(myTask?.actualEffort || 0))}h
+                    {Math.max(0, Number((editingTask || myTask)?.estimatedEffort || 0) - Number((editingTask || myTask)?.actualEffort || 0))}h
                   </span>
                 </div>
               </div>
 
-              {!isCompletingTask && (
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Progress: {progressInput}%
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={progressInput}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      setProgressInput(val);
-                      if (val >= 100) setStatusInput('Completed');
-                    }}
-                    className="w-full cursor-pointer accent-blue-600"
-                  />
-                </div>
-              )}
-
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Hours Worked in this Work Session (adds to logged time)
+                  Session Hours Worked (adds to total logged effort)
                 </label>
                 <input
                   type="number"
@@ -1071,17 +1313,18 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
                     onChange={(e) => setBlockedReasonInput(e.target.value)}
                     placeholder="Describe what is causing the delay or blockage..."
                     className="w-full px-3 py-2 bg-rose-50/50 border border-rose-300 rounded-xl text-xs font-medium resize-none"
+                    required
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Completion Remarks / Session Notes</label>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Session Notes / Completion Remarks</label>
                 <textarea
                   rows={2}
                   value={remarksInput}
                   onChange={(e) => setRemarksInput(e.target.value)}
-                  placeholder="Notes on work performed..."
+                  placeholder="Details of work performed in this session..."
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium resize-none"
                 />
               </div>
@@ -1089,7 +1332,10 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => setTaskUpdateOpen(false)}
+                  onClick={() => {
+                    setTaskUpdateOpen(false);
+                    setEditingTask(null);
+                  }}
                   className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
                 >
                   Cancel
@@ -1097,11 +1343,167 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-xs ${
+                  className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-xs cursor-pointer ${
                     isCompletingTask ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'
                   }`}
                 >
-                  {isCompletingTask ? 'Confirm Task Completed' : 'Save Progress'}
+                  {isCompletingTask ? 'Confirm Completed' : 'Save Session'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Task Modal */}
+      {addTaskOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+            <div>
+              <h3 className="text-base font-black text-slate-900">+ Add Department Task</h3>
+              <p className="text-xs text-slate-500">Define a real execution task for {ownership?.department}.</p>
+            </div>
+            <form onSubmit={handleAddTaskSubmit} className="space-y-3.5">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Task Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={taskNameInput}
+                  onChange={(e) => setTaskNameInput(e.target.value)}
+                  placeholder="e.g. Prepare SLD / Schematics Drawing"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Assigned User</label>
+                  <select
+                    value={taskAssigneeInput}
+                    onChange={(e) => setTaskAssigneeInput(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                  >
+                    <option value="">-- Choose Member --</option>
+                    {deptUserCandidates.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Planned Effort (Hours)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    value={taskEstimatedEffortInput}
+                    onChange={(e) => setTaskEstimatedEffortInput(e.target.value)}
+                    placeholder="4"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Target Due Date</label>
+                <input
+                  type="date"
+                  value={taskTargetDateInput}
+                  onChange={(e) => setTaskTargetDateInput(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Instructions / Description</label>
+                <textarea
+                  rows={2}
+                  value={taskInstructionsInput}
+                  onChange={(e) => setTaskInstructionsInput(e.target.value)}
+                  placeholder="Specific technical criteria or scope..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAddTaskOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  Create Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Document Modal (pgAdmin 4 job_documents table) */}
+      {uploadDocOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+            <div>
+              <h3 className="text-base font-black text-slate-900">+ Upload Job Document</h3>
+              <p className="text-xs text-slate-500">Stored in PostgreSQL table <code className="text-indigo-600 font-bold">job_documents</code>.</p>
+            </div>
+            <form onSubmit={handleUploadDocSubmit} className="space-y-3.5">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Select File <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="file"
+                  onChange={(e) => setDocFile(e.target.files[0] || null)}
+                  accept=".pdf,.dwg,.dxf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Document Category / Type</label>
+                <select
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                >
+                  <option value="CUSTOMER_DRAWING">Customer Drawing / SLD</option>
+                  <option value="BOM">Bill of Materials (BOM)</option>
+                  <option value="PO">Purchase Order (PO)</option>
+                  <option value="PANEL_SPECIFICATION">Technical Specification</option>
+                  <option value="TEST_REPORT">Test Report / QC Document</option>
+                  <option value="GENERAL">General Job Document</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadDocOpen(false);
+                    setDocFile(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading || !docFile}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs cursor-pointer disabled:bg-slate-300"
+                >
+                  {actionLoading ? 'Uploading...' : 'Upload Document'}
                 </button>
               </div>
             </form>
@@ -1163,6 +1565,34 @@ export default function UserJobDetail({ onSwitchToAdmin }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Reassign Engineer Modal */}
+      {reassignModalOpen && (
+        <ReassignEngineerModal
+          job={job}
+          isOpen={reassignModalOpen}
+          onClose={() => setReassignModalOpen(false)}
+          onSuccess={async (updatedJob) => {
+            setJob(prev => ({ ...prev, ...updatedJob }));
+            await fetchWorkflowState();
+            setReassignModalOpen(false);
+          }}
+        />
+      )}
+
+      {/* Re-Handover Modal */}
+      {reHandoverModalOpen && (
+        <ReHandoverModal
+          job={job}
+          isOpen={reHandoverModalOpen}
+          onClose={() => setReHandoverModalOpen(false)}
+          onSuccess={async (updatedJob) => {
+            setJob(prev => ({ ...prev, ...updatedJob }));
+            await fetchWorkflowState();
+            setReHandoverModalOpen(false);
+          }}
+        />
       )}
 
     </div>

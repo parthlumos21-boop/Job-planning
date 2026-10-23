@@ -92,11 +92,15 @@ export default function MyJobs() {
       const isResp = (j.responsibleEnggName || '').toLowerCase().trim() === userNameLower || j.assignedEngineerId === user?.id;
       const isPlanOwner = (j.planningOwnerName || '').toLowerCase().trim() === userNameLower || j.planningOwnerId === user?.id;
       const isWorker = j.currentWorkerId === user?.id;
+      const isAssigned =
+        (j.assignedUserName || '').toLowerCase().trim() === userUnameLower ||
+        (j.assignedUserName || '').toLowerCase().trim() === userNameLower ||
+        j.assignedUserId === user?.id;
       
       const visibleDepts = (j.visibleToDepartments || []).map(d => String(d).toLowerCase().trim());
       const inDept = visibleDepts.some(d => userDepts.has(d)) || userDepts.has((j.targetDepartment || '').toLowerCase().trim());
 
-      return isResp || isPlanOwner || isWorker || isCreator || inDept;
+      return isResp || isPlanOwner || isWorker || isAssigned || isCreator || inDept;
     });
 
     // Guaranteed deduplication by jobNo / id
@@ -157,7 +161,7 @@ export default function MyJobs() {
 
           <Link
             to="/jobs/new"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1E3F66] hover:bg-[#163050] text-white text-xs font-semibold shadow-xs hover:shadow transition-all"
           >
             <span>+ New Job</span>
           </Link>

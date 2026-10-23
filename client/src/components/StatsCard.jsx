@@ -1,53 +1,46 @@
-export default function StatsCard({ title, value, icon, color = 'blue' }) {
-  const colorMap = {
-    blue: {
-      card: 'bg-white border-[#DCE5F0] hover:border-[#1769FF]',
-      pill: 'bg-[#E8F1FF] text-[#1769FF]',
-      text: 'text-[#172B4D]'
-    },
-    yellow: {
-      card: 'bg-white border-[#DCE5F0] hover:border-[#92400E]',
-      pill: 'bg-[#FEF3C7] text-[#92400E]',
-      text: 'text-[#172B4D]'
-    },
-    green: {
-      card: 'bg-white border-[#DCE5F0] hover:border-[#15803D]',
-      pill: 'bg-[#DCFCE7] text-[#15803D]',
-      text: 'text-[#172B4D]'
-    },
-    orange: {
-      card: 'bg-white border-[#DCE5F0] hover:border-[#92400E]',
-      pill: 'bg-[#FEF3C7] text-[#92400E]',
-      text: 'text-[#172B4D]'
-    },
-    red: {
-      card: 'bg-white border-[#DCE5F0] hover:border-[#B91C1C]',
-      pill: 'bg-[#FEE2E2] text-[#B91C1C]',
-      text: 'text-[#172B4D]'
-    },
-    purple: {
-      card: 'bg-white border-[#DCE5F0] hover:border-[#1769FF]',
-      pill: 'bg-[#E8F1FF] text-[#1769FF]',
-      text: 'text-[#172B4D]'
-    },
-  };
-
-  const theme = colorMap[color] || colorMap.blue;
-
+export default function StatsCard({
+  title,
+  value,
+  icon,
+  trend,
+  trendPositive = true,
+  subtitle
+}) {
   return (
-    <div className={`rounded-xl border p-5 shadow-xs transition-all ${theme.card}`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#64748B]">{title}</p>
-          <p className={`mt-1.5 text-2xl font-black ${theme.text}`}>{value}</p>
-        </div>
+    <div className="bg-white rounded-[11px] border border-slate-200/90 p-2.5 sm:p-3 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between">
+      {/* OUTER CARD HEADER: Title on left, small 13-14px outline icon on right */}
+      <div className="flex items-center justify-between px-0.5 pb-2">
+        <span className="text-[11px] font-medium text-slate-500 tracking-tight select-none">
+          {title}
+        </span>
         {icon && (
-          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${theme.pill}`}>
-            <span className="text-xl">{icon}</span>
-          </div>
+          <span className="text-slate-400 shrink-0 flex items-center justify-center">
+            {icon}
+          </span>
         )}
+      </div>
+
+      {/* INNER KPI CONTAINER: Distinct nested border and inset */}
+      <div className="bg-slate-50/40 rounded-[8px] border border-slate-200/90 p-2.5 sm:p-3 flex-1 flex flex-col justify-between">
+        {/* Main KPI Value */}
+        <div className="text-2xl font-bold tracking-tight text-slate-900 leading-none">
+          {value !== undefined && value !== null ? value : 0}
+        </div>
+
+        {/* Secondary Supporting Information */}
+        <div className="mt-2.5 flex items-center gap-1.5 text-[10px] leading-tight font-medium text-slate-400">
+          {trend && (
+            <span className={trendPositive ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}>
+              {trend}
+            </span>
+          )}
+          {subtitle && (
+            <span className="truncate">
+              {subtitle}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-

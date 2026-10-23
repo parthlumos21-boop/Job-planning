@@ -87,8 +87,8 @@ export default function SearchableUserSelect({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(prev => !prev)}
-        className={`w-full flex items-center justify-between px-3 py-2 text-sm bg-white border rounded-lg transition-all text-left ${
-          isOpen ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-300 hover:border-slate-400'
+        className={`w-full h-[38px] flex items-center justify-between px-3 text-[13px] bg-white border rounded-[7px] shadow-2xs transition-colors text-left ${
+          isOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-300 hover:border-slate-400'
         } ${disabled ? 'bg-slate-100 cursor-not-allowed text-slate-500' : 'cursor-pointer text-slate-800'}`}
       >
         <span className="flex items-center gap-2 truncate">

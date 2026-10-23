@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   PanelLeftClose,
   PanelLeftOpen,
-  Pin
+  Search,
+  X
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -15,16 +16,33 @@ export default function Sidebar({
   onToggleCollapse
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hoveredItemKey, setHoveredItemKey] = useState(null);
+  const searchInputRef = useRef(null);
 
   // Expanded visually if not collapsed, or if currently being hovered in collapsed peek mode
   const isExpanded = !isCollapsed || isHovered;
+
+  // Filter navigation items if search query is typed
+  const displayedItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return navItems;
+
+    // Filter items matching label
+    const matched = navItems.filter(item => {
+      if (item.section) return false;
+      return (item.label || '').toLowerCase().includes(q);
+    });
+
+    return matched;
+  }, [navItems, searchQuery]);
 
   return (
     <>
       {/* Spacer div in flex layout: maintains layout width so main content does not jump on hover peek */}
       <div
-        className={`shrink-0 transition-all duration-300 ease-in-out ${
-          isCollapsed ? 'w-20' : 'w-64'
+        className={`shrink-0 transition-all duration-200 ease-in-out ${
+          isCollapsed ? 'w-[68px]' : 'w-[224px]'
         }`}
         aria-hidden="true"
       />
@@ -32,29 +50,34 @@ export default function Sidebar({
       {/* Actual Sidebar: fixed position on left */}
       <aside
         onMouseEnter={() => isCollapsed && setIsHovered(true)}
-        onMouseLeave={() => isCollapsed && setIsHovered(false)}
-        className={`fixed top-0 left-0 h-screen flex flex-col bg-white border-r border-[#DCE5F0] text-[#172B4D] z-40 transition-all duration-300 ease-in-out ${
-          isExpanded ? 'w-64' : 'w-20'
+        onMouseLeave={() => {
+          if (isCollapsed) {
+            setIsHovered(false);
+            setHoveredItemKey(null);
+          }
+        }}
+        className={`fixed top-0 left-0 h-screen flex flex-col bg-white border-r border-[#E2E8F0] text-[#172B4D] z-40 transition-all duration-200 ease-in-out ${
+          isExpanded ? 'w-[224px]' : 'w-[68px]'
         } ${
           isCollapsed && isHovered
-            ? 'shadow-2xl shadow-slate-400/30 ring-1 ring-slate-200'
-            : 'shadow-xs'
+            ? 'shadow-xl shadow-slate-900/10'
+            : 'shadow-2xs'
         }`}
       >
-        {/* Top Header / Brand Logo & Toggle Button */}
-        <div className="p-3.5 bg-white border-b border-[#DCE5F0] flex items-center justify-between gap-3 min-h-[110px]">
+        {/* Top Header: Brand Logo & Collapse Toggle (Prominent & Balanced) */}
+        <div className="px-3.5 py-3 border-b border-[#E2E8F0] flex items-center justify-between gap-2 min-h-[76px]">
           {isExpanded ? (
-            <div className="flex items-center gap-3 overflow-hidden flex-1">
+            <div className="flex items-center gap-2.5 overflow-hidden flex-1">
               <img
                 src="/21.png"
                 alt="Swati Switchgears logo"
-                className="h-20 md:h-22 w-auto max-w-[160px] object-contain drop-shadow-md shrink-0 transition-transform duration-200 hover:scale-105"
+                className="h-14 md:h-16 w-auto max-w-[145px] object-contain drop-shadow-xs shrink-0 transition-transform duration-200 hover:scale-105"
               />
               <div className="overflow-hidden whitespace-nowrap">
-                <div className="text-[15px] font-black text-[#172B4D] tracking-tight leading-tight">
+                <div className="text-[13px] font-bold text-[#1E293B] tracking-tight leading-tight">
                   Job Planning
                 </div>
-                <div className="text-[11px] text-[#1769FF] font-bold uppercase tracking-wider">
+                <div className="text-[10px] text-[#1E3F66] font-bold uppercase tracking-wider">
                   Tracking System
                 </div>
               </div>
@@ -64,110 +87,187 @@ export default function Sidebar({
               <img
                 src="/21.png"
                 alt="Logo"
-                className="h-14 w-14 object-contain drop-shadow-md transition-transform duration-200 hover:scale-110"
+                className="h-11 w-11 object-contain drop-shadow-xs transition-transform duration-200 hover:scale-105"
               />
             </div>
           )}
 
-          {/* Toggle / Pin Button */}
+          {/* Collapse/Expand Toggle Button */}
           {isExpanded && (
             <button
               onClick={onToggleCollapse}
               title={isCollapsed ? 'Pin Sidebar Open' : 'Collapse Sidebar'}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
             >
-              {isCollapsed ? (
-                <Pin size={18} className="text-[#1769FF] rotate-45" />
-              ) : (
-                <PanelLeftClose size={18} />
-              )}
+              <PanelLeftClose size={16} strokeWidth={1.8} />
             </button>
           )}
         </div>
 
-        {/* User / Department Info Badge */}
+        {/* In-Sidebar Search without '/' indicator */}
         {isExpanded ? (
-          <div className="p-3.5 border-b border-[#DCE5F0] bg-[#F8FAFC]">
-            <div className="font-bold text-[#1769FF] text-xs uppercase tracking-wide truncate">
-              {deptName}
-            </div>
-            <div className="text-[#172B4D] font-bold text-sm mt-0.5 truncate flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              {user?.username}
+          <div className="px-3 pt-3 pb-1">
+            <div className="relative flex items-center">
+              <Search
+                size={14}
+                strokeWidth={1.8}
+                className="absolute left-2.5 text-slate-400 pointer-events-none"
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-[36px] pl-8 pr-7 text-[12px] bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-[#E2E8F0] rounded-[8px] focus:outline-none focus:ring-1 focus:ring-[#1E3F66] focus:border-[#1E3F66] text-slate-800 placeholder-slate-400 transition-all font-medium"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
           </div>
         ) : (
-          <div
-            className="py-3 px-2 border-b border-[#DCE5F0] bg-[#F8FAFC] flex justify-center"
-            title={`${user?.username || 'User'} (${deptName})`}
-          >
-            <div className="w-9 h-9 rounded-full bg-[#E8F1FF] border border-[#DCE5F0] text-[#1769FF] font-black text-xs flex items-center justify-center">
+          <div className="px-2 pt-2 pb-1 flex justify-center">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              title="Search"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <Search size={16} strokeWidth={1.8} />
+            </button>
+          </div>
+        )}
+
+        {/* User / Department Context Pill */}
+        {isExpanded ? (
+          <div className="mx-3 my-2 px-2.5 py-1.5 rounded-[8px] bg-slate-50 border border-[#E2E8F0]/70 flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-bold text-[#1E3F66] uppercase tracking-wider truncate">
+                {deptName}
+              </div>
+              <div className="text-[12px] font-semibold text-slate-800 truncate flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <span className="truncate">{user?.username}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-1 px-2 flex justify-center">
+            <div
+              className="w-8 h-8 rounded-full bg-slate-100 border border-[#E2E8F0] text-[#1E3F66] font-bold text-[11px] flex items-center justify-center select-none"
+              title={`${user?.username || 'User'} (${deptName})`}
+            >
               {user?.username ? user.username.substring(0, 2).toUpperCase() : 'U'}
             </div>
           </div>
         )}
 
-        {/* Navigation Items */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden">
-          {navItems
+        {/* Navigation Items List */}
+        <nav className="flex-1 px-2 py-1.5 space-y-0.5 overflow-y-auto overflow-x-hidden">
+          {displayedItems
             .filter((item) => item.show !== false)
             .map((item, idx) => {
               if (item.section) {
-                if (!isExpanded) return <div key={`sep-${idx}`} className="my-2 border-t border-[#DCE5F0]" />;
+                if (!isExpanded) return <div key={`sep-${idx}`} className="my-1.5 border-t border-[#E2E8F0]/80" />;
                 return (
-                  <div key={`sec-${idx}`} className="pt-3.5 pb-1 px-3 text-[10px] font-bold text-[#64748B] uppercase tracking-wider select-none">
+                  <div
+                    key={`sec-${idx}`}
+                    className="pt-3 pb-1 px-2.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider select-none"
+                  >
                     {item.section}
                   </div>
                 );
               }
 
               const active = isActive(item.to);
+              const uniqueKey = item.to || item.label;
+
               return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  title={!isExpanded ? item.label : undefined}
-                  className={`relative flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-sm transition-all ${
-                    active
-                      ? 'bg-[#E8F1FF] text-[#1769FF] font-bold shadow-xs border border-[#DCE5F0]/60'
-                      : 'text-[#64748B] hover:text-[#172B4D] hover:bg-[#F8FAFC] font-medium'
-                  } ${!isExpanded ? 'justify-center' : ''}`}
+                <div
+                  key={uniqueKey}
+                  className="relative"
+                  onMouseEnter={() => !isExpanded && setHoveredItemKey(uniqueKey)}
+                  onMouseLeave={() => !isExpanded && setHoveredItemKey(null)}
                 >
-                  <span className={`shrink-0 flex items-center justify-center ${active ? 'text-[#1769FF]' : 'text-[#64748B]'}`}>
-                    {item.icon}
-                  </span>
-                  {isExpanded && (
-                    <span className="truncate whitespace-nowrap tracking-wide flex-1">
-                      {item.label}
+                  <Link
+                    to={item.to}
+                    className={`group relative flex items-center gap-2.5 px-2.5 py-2 rounded-[8px] text-[13px] transition-all min-h-[38px] ${
+                      active
+                        ? 'bg-[#EDF2F7] text-[#1E293B] font-semibold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/90 font-medium'
+                    } ${!isExpanded ? 'justify-center' : ''}`}
+                  >
+                    {/* Outline icon */}
+                    <span
+                      className={`shrink-0 flex items-center justify-center transition-colors ${
+                        active
+                          ? 'text-[#1E3F66]'
+                          : 'text-slate-400 group-hover:text-slate-600'
+                      }`}
+                    >
+                      {item.icon}
                     </span>
+
+                    {/* Label (Expanded) */}
+                    {isExpanded && (
+                      <span className="truncate whitespace-nowrap tracking-tight flex-1">
+                        {item.label}
+                      </span>
+                    )}
+
+                    {/* Notification Badge */}
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span
+                        className={`rounded-full font-bold transition-all ${
+                          isExpanded
+                            ? 'px-2 py-0.2 text-[10px] bg-slate-100 text-slate-700 border border-slate-200/90 ml-auto'
+                            : 'absolute top-1 right-1 w-4 h-4 p-0 flex items-center justify-center bg-[#1E3F66] text-white text-[9px] shadow-2xs ring-2 ring-white'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+
+                  {/* Floating Tooltip (Collapsed Hover) */}
+                  {!isExpanded && hoveredItemKey === uniqueKey && (
+                    <div className="absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap z-50 pointer-events-none flex items-center gap-2 animate-in fade-in-50 duration-150">
+                      <span>{item.label}</span>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-[#1E3F66] text-white">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
                   )}
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className={`rounded-full font-black transition-all ${
-                      isExpanded
-                        ? 'px-2 py-0.5 text-[10px] bg-[#E8F1FF] text-[#1769FF] border border-[#DCE5F0] ml-auto shadow-xs'
-                        : 'absolute -top-1 -right-1 w-4 h-4 p-0 flex items-center justify-center bg-[#1769FF] text-white text-[9px] shadow-sm ring-2 ring-white'
-                    }`}>
-                      {item.badge}
-                    </span>
-                  )}
-                  {/* Subtle active indicator when in compact rail mode */}
-                  {!isExpanded && active && !item.badge && (
-                    <span className="absolute right-1 w-1.5 h-1.5 rounded-full bg-[#1769FF] shadow-xs"></span>
-                  )}
-                </Link>
+                </div>
               );
             })}
+
+          {/* Empty search state */}
+          {displayedItems.length === 0 && (
+            <div className="py-6 text-center text-xs text-slate-400">
+              No matching items
+            </div>
+          )}
         </nav>
 
-        {/* Bottom Rail Toggle Button (Compact mode) */}
+        {/* Bottom Rail: Expand Toggle Button in Collapsed Mode */}
         {!isExpanded && (
-          <div className="p-2 border-t border-[#DCE5F0] flex justify-center bg-white">
+          <div className="p-2 border-t border-[#E2E8F0] flex justify-center bg-white">
             <button
               onClick={onToggleCollapse}
               title="Expand Sidebar"
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
             >
-              <PanelLeftOpen size={18} />
+              <PanelLeftOpen size={16} strokeWidth={1.8} />
             </button>
           </div>
         )}

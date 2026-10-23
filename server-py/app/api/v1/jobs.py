@@ -156,8 +156,15 @@ def format_job_row(j: Job, department: str | None = None) -> dict:
         "assignmentReasonCategory": getattr(j, "assignment_reason_category", "") or "",
         "assignmentExplanation": getattr(j, "assignment_explanation", "") or "",
         "forwardingReasonCategory": getattr(j, "forwarding_reason_category", "") or "",
-        "forwardingNote": getattr(j, "forwarding_note", "") or "",
         "stageDurations": getattr(j, "stage_durations", {}) or {},
+        "previousResponsibleEnggName": getattr(j, "previous_responsible_engg_name", "") or "",
+        "returnReason": getattr(j, "return_reason", "") or getattr(j, "handover_return_reason", "") or "",
+        "returnComment": getattr(j, "return_comment", "") or "",
+        "returnedBy": getattr(j, "returned_by", "") or "",
+        "returnedAt": j.returned_at.isoformat() if getattr(j, "returned_at", None) else None,
+        "reassignmentHistory": getattr(j, "reassignment_history", []) or [],
+        "assignedUserId": getattr(j, "assigned_user_id", None),
+        "assignedUserName": getattr(j, "assigned_user_name", "") or "",
     }
 
 # GET /api/jobs/stats
@@ -189,6 +196,82 @@ async def get_job_stats(
         }
 
     return stats
+
+# GET /api/jobs/lookup (Optimized lightweight catalog for New Job template pre-fill)
+@router.get("/lookup")
+async def get_jobs_lookup(
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: UserPayload = Depends(get_current_user)
+):
+    stmt = (
+        select(
+            Job.id,
+            Job.external_id,
+            Job.job_no,
+            Job.panel_name,
+            Job.client_name,
+            Job.project_name,
+            Job.responsible_engg_name,
+            Job.target_department,
+            Job.current_department,
+            Job.lifecycle_status,
+            Job.createdBy,
+            Job.visible_to_departments,
+            Job.assigned_engineer_id
+        )
+        .order_by(Job.id.desc())
+    )
+
+    if search and search.strip():
+        q_raw = search.strip().replace("#", "")
+        q = f"%{q_raw}%"
+        stmt = stmt.where(
+            or_(
+                Job.job_no.ilike(q),
+                Job.panel_name.ilike(q),
+                Job.client_name.ilike(q),
+                Job.project_name.ilike(q),
+                Job.responsible_engg_name.ilike(q)
+            )
+        )
+
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    is_admin = (
+        current_user.role in ["admin", "executive"]
+        or (current_user.username or "").lower() in ["keval v shah", "keval", "kevalvshah", "admin", "admin2"]
+    )
+    user_depts = [d.lower() for d in (current_user.departments or [])]
+    user_name_lower = (current_user.name or current_user.username or "").strip().lower()
+    user_uname_lower = (current_user.username or "").strip().lower()
+
+    output = []
+    for r in rows:
+        if not is_admin and "marketing" not in user_depts:
+            raw_vis = [d.lower() for d in (r.visible_to_departments or [])]
+            tgt = (r.target_department or "").lower()
+            cur_d = (r.current_department or "").lower()
+            is_assigned = (r.responsible_engg_name or "").strip().lower() == user_name_lower or r.assigned_engineer_id == current_user.id
+            is_creator = (r.createdBy or "").strip().lower() == user_uname_lower
+            has_dept_access = any(d in raw_vis or d == tgt or d == cur_d for d in user_depts)
+            if not (has_dept_access or is_assigned or is_creator):
+                continue
+
+        clean_job_no = (r.job_no or "").replace("#", "").strip()
+        output.append({
+            "id": r.external_id or r.id,
+            "jobNo": clean_job_no,
+            "panelName": r.panel_name or "",
+            "clientName": r.client_name or "",
+            "projectName": r.project_name or "",
+            "responsibleEnggName": r.responsible_engg_name or "",
+            "department": r.current_department or r.target_department or "marketing",
+            "status": r.lifecycle_status or "Draft"
+        })
+
+    return output
 
 # GET /api/jobs
 @router.get("")
@@ -681,7 +764,7 @@ async def create_job(
                 "job_no": new_job.job_no,
                 "panel_name": new_job.panel_name,
                 "client_name": new_job.client_name,
-                "responsible_engineer": new_job.responsible_engineer,
+                "responsible_engineer": new_job.responsible_engg_name or "",
                 "created_by": user.username
             },
             updated_by=user.username
