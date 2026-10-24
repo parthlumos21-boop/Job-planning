@@ -12,6 +12,7 @@ from app.api.v1.job_analytics import router as analytics_router
 from app.api.v1.job_handover import router as handover_router
 from app.api.v1.admin_dashboard import router as admin_dashboard_router
 from app.api.v1.marketing_tasks import router as marketing_tasks_router
+from app.api.v1.planning import router as planning_router
 from fastapi.staticfiles import StaticFiles
 import os
 
@@ -48,6 +49,7 @@ app.include_router(monitoring_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
 app.include_router(admin_dashboard_router, prefix="/api")
 app.include_router(marketing_tasks_router, prefix="/api")
+app.include_router(planning_router, prefix="/api")
 
 @app.get("/api/health")
 async def health_check():

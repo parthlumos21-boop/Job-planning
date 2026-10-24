@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { ArrowLeft, Save, Loader2, Plus, Minus, CheckSquare, X } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Plus, Minus, CheckSquare, X, Sparkles, Clock, Calendar } from 'lucide-react';
 import { DEPARTMENT_USER_OPTIONS } from './departmentUserOptions';
 import SearchableUserSelect from './SearchableUserSelect';
 import SearchableJobSelect from './SearchableJobSelect';
@@ -334,6 +334,35 @@ export default function NewJobForm() {
     CONTROL: [0],
     PDF: [0]
   });
+
+  // Dynamic Department Planning Engine Preview State
+  const [timelinePreview, setTimelinePreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        setPreviewLoading(true);
+        const res = await api.post('/planning/calculate-preview', {
+          start_date: core.poDate || new Date().toISOString().split('T')[0],
+          params: {
+            panel_type: core.typeOfPanel || core.panelName || 'Standard',
+            quantity: parseInt(core.qty) || 1,
+            complexity: 'medium'
+          }
+        });
+        if (res.data?.success) {
+          setTimelinePreview(res.data.timeline);
+        }
+      } catch (err) {
+        // Quiet fail if backend not reachable yet
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [core.typeOfPanel, core.panelName, core.qty, core.poDate]);
 
   // My Task Planning State (Regular Department Users)
   const [myTask, setMyTask] = useState({
@@ -873,6 +902,52 @@ export default function NewJobForm() {
             )}
           </div>
         </div>
+
+        {/* Dynamic Department Planning Forecast Preview Card */}
+        {timelinePreview && (
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-[10px] p-4 text-white border border-indigo-800/40 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-amber-400" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-100">
+                  Dynamic Department Timeline Forecast
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 font-medium">
+                  Formula Evaluated • Sunday & Holiday Aware
+                </span>
+                {previewLoading && (
+                  <Loader2 size={12} className="animate-spin text-indigo-300" />
+                )}
+              </div>
+              <div className="flex items-center gap-4 text-xs font-semibold">
+                <div>
+                  <span className="text-slate-400 font-normal">Working Days: </span>
+                  <span className="text-amber-300 font-bold">{timelinePreview.total_working_days} Days</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-normal">Projected Dispatch: </span>
+                  <span className="text-emerald-300 font-bold">{timelinePreview.projected_completion}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+              {timelinePreview.departments && Object.entries(timelinePreview.departments).map(([dKey, dVal]) => (
+                <div key={dKey} className="bg-white/5 hover:bg-white/10 p-2.5 rounded-lg border border-white/10 text-center transition-all">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">
+                    {dKey === 'design' ? 'Electrical' : dKey === 'mechanical' ? 'Mechanical' : dKey}
+                  </div>
+                  <div className="text-sm font-black text-indigo-200 mt-0.5">
+                    {dVal.duration_days}d
+                  </div>
+                  <div className="text-[9px] text-slate-400 mt-0.5 font-medium">
+                    {dVal.planned_end ? dVal.planned_end.slice(5) : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Planning / Task Section (Inline & Compact) */}
         <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-hidden">

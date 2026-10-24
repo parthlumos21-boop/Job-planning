@@ -799,6 +799,15 @@ async def create_job(
 
     await db.commit()
     await db.refresh(new_job)
+
+    # Automatically initialize dynamic department timeline schedules
+    try:
+        from app.api.v1.planning import initialize_job_timeline_internal
+        await initialize_job_timeline_internal(new_job.id, db)
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"Could not auto-initialize timeline for job {new_job.id}: {e}")
+
     return format_job_row(new_job)
 
 # POST /api/jobs/select

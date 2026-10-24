@@ -404,4 +404,70 @@ class JobDocument(Base):
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
     handover_id = Column(Integer, ForeignKey("job_handovers.id", ondelete="SET NULL"), nullable=True)
 
+class DepartmentFormulaRule(Base):
+    __tablename__ = "department_formula_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    department = Column(String(50), unique=True, nullable=False, index=True)
+    base_days = Column(Integer, default=2, nullable=False)
+    condition_modifiers = Column(JSONB, default=list) # [{"field": "complexity", "operator": "equals", "value": "high", "additionalDays": 2}]
+    multiplier = Column(Numeric(4, 2), default=1.0)
+    is_active = Column(Boolean, default=True)
+    description = Column(String(255), default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class CompanyWorkingCalendar(Base):
+    __tablename__ = "company_working_calendar"
+
+    id = Column(Integer, primary_key=True, index=True)
+    calendar_date = Column(Date, unique=True, nullable=False, index=True)
+    is_working_day = Column(Boolean, default=True, nullable=False)
+    holiday_name = Column(String(100), nullable=True)
+    notes = Column(String(255), nullable=True)
+
+class JobDepartmentSchedule(Base):
+    __tablename__ = "job_department_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    department = Column(String(50), nullable=False, index=True) # 'marketing', 'design', 'mechanical', 'purchase', 'production', 'qc', 'dispatch'
+    planned_start_date = Column(Date, nullable=False)
+    original_target_date = Column(Date, nullable=False) # Immutable baseline
+    calculated_target_date = Column(Date, nullable=False) # Shifted dynamically by upstream actuals
+    approved_target_date = Column(Date, nullable=False) # Shifted by Admin approved extension
+    actual_start_date = Column(Date, nullable=True)
+    actual_completion_date = Column(Date, nullable=True)
+    planned_duration_days = Column(Integer, default=1)
+    actual_duration_days = Column(Integer, default=0)
+    raw_delay_days = Column(Integer, default=0) # actual - original
+    approved_extension_days = Column(Integer, default=0) # approved - original
+    accountable_delay_days = Column(Integer, default=0) # actual - approved
+    status = Column(String(50), default="Pending", index=True) # 'Pending', 'In Progress', 'Completed', 'Overdue'
+    notes = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class DepartmentExtensionRequest(Base):
+    __tablename__ = "department_extension_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    schedule_id = Column(Integer, ForeignKey("job_department_schedules.id", ondelete="CASCADE"), nullable=True)
+    department = Column(String(50), nullable=False, index=True)
+    current_deadline = Column(Date, nullable=False)
+    requested_deadline = Column(Date, nullable=False)
+    requested_extension_days = Column(Integer, default=1)
+    reason_category = Column(String(100), nullable=False)
+    reason_text = Column(Text, nullable=False)
+    status = Column(String(50), default="Pending", index=True) # 'Pending', 'Approved', 'Rejected'
+    requested_by_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    requested_by_name = Column(String(255), nullable=False)
+    reviewed_by_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    reviewed_by_name = Column(String(255), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    review_remarks = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 

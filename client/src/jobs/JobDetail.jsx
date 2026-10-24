@@ -19,6 +19,7 @@ import DepartmentHandoverModal from './DepartmentHandoverModal';
 import SimpleHandoverModal from './SimpleHandoverModal';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import UserJobDetail from './UserJobDetail';
+import DynamicDepartmentTimeline from '../components/DynamicDepartmentTimeline';
 import { cleanJobNo, getHandoverAccountability, isMarketingUser } from '../config/marketingFormConfig';
 import { getHandoverBadge } from '../config/workflowConfig';
 import { jsPDF } from 'jspdf';
@@ -763,7 +764,10 @@ export default function JobDetail() {
 
       {/* TAB 5: TIMELINE & ADMIN DURATION BREAKDOWN */}
       {activeTab === 'timeline' && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Dynamic Department Timeline & Delay Tracker */}
+          <DynamicDepartmentTimeline jobId={job.id} user={user} onTimelineUpdated={fetchJob} />
+
           {/* 🔒 ADMIN-EXCLUSIVE STAGE DURATION BREAKDOWN */}
           {isAdmin && (
             <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-5 rounded-2xl border border-slate-800 text-white shadow-sm">

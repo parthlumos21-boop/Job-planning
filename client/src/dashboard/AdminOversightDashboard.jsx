@@ -14,6 +14,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Legend, Cell
 } from 'recharts';
+import AdminExtensionApprovalQueue from '../components/AdminExtensionApprovalQueue';
+import DynamicFormulaRulesManager from '../components/DynamicFormulaRulesManager';
 
 const DELAY_CATEGORIES = [
   "Pending information from customer",
@@ -128,6 +130,7 @@ export default function AdminOversightDashboard() {
 
   // Active KPI Card filter
   const [activeKpiFilter, setActiveKpiFilter] = useState(null);
+  const [showFormulaRulesModal, setShowFormulaRulesModal] = useState(false);
 
   // Section 5: Users Workload & Delay Department & Search States
   const [selectedUserDept, setSelectedUserDept] = useState('all');
@@ -810,6 +813,14 @@ export default function AdminOversightDashboard() {
               </span>
             </div>
             <button
+              onClick={() => setShowFormulaRulesModal(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
+              title="Configure Dynamic Formula Rules"
+            >
+              <Settings2 size={14} className="text-white" />
+              <span>Formula Rules</span>
+            </button>
+            <button
               onClick={fetchAllAdminData}
               disabled={refreshing}
               className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
@@ -940,6 +951,9 @@ export default function AdminOversightDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Dynamic Department Extension Approval Queue */}
+      <AdminExtensionApprovalQueue onReviewAction={fetchAllAdminData} />
 
       {/* 2. CHARTS SECTION (When placement is 'before') */}
       {chartPlacement === 'before' && renderChartsSection()}
@@ -2014,6 +2028,15 @@ export default function AdminOversightDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Formula Rules Configurator Modal */}
+      {showFormulaRulesModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
+            <DynamicFormulaRulesManager user={user} onClose={() => setShowFormulaRulesModal(false)} />
           </div>
         </div>
       )}
