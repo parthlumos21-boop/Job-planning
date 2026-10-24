@@ -161,7 +161,7 @@ export default function MyJobs() {
 
           <Link
             to="/jobs/new"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1E3F66] hover:bg-[#163050] text-white text-xs font-semibold shadow-xs hover:shadow transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0000AA] hover:bg-[#000088] text-white text-xs font-semibold shadow-xs hover:shadow transition-all"
           >
             <span>+ New Job</span>
           </Link>

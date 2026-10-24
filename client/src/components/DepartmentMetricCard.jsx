@@ -65,27 +65,27 @@ export default function DepartmentMetricCard({ deptKey, stats, isSelected, onCli
   return (
     <button
       onClick={onClick}
-      className={`text-left w-full rounded-2xl border p-4 transition-all duration-200 shadow-sm hover:shadow-md ${
+      className={`text-left w-full rounded-xl border p-2.5 transition-all duration-200 shadow-xs hover:shadow-sm ${
         theme.bgColor
       } ${theme.borderColor} ${isSelected ? theme.activeRing : 'hover:scale-[1.01]'}`}
     >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className={`p-2 rounded-xl bg-white shadow-xs ${theme.textColor}`}>
-            <Icon size={18} />
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`p-1.5 rounded-lg bg-white shadow-xs shrink-0 ${theme.textColor}`}>
+            <Icon size={14} />
           </div>
-          <div>
-            <h4 className={`text-sm font-bold ${theme.textColor}`}>{theme.name}</h4>
-            <p className="text-xs text-slate-500">{total} Total Jobs</p>
+          <div className="min-w-0">
+            <h4 className={`text-[11px] font-bold truncate ${theme.textColor}`}>{theme.name}</h4>
+            <p className="text-[10px] text-slate-500 leading-tight">{total} Jobs</p>
           </div>
         </div>
-        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${theme.badgeColor}`}>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ml-1 ${theme.badgeColor}`}>
           {percent}%
         </span>
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full bg-white/80 rounded-full h-2 overflow-hidden border border-slate-200/50 mb-2">
+      <div className="w-full bg-white/80 rounded-full h-1.5 overflow-hidden border border-slate-200/50 mb-1.5">
         <div
           className={`h-full rounded-full transition-all duration-500 ${theme.barColor}`}
           style={{ width: `${percent}%` }}
@@ -93,7 +93,7 @@ export default function DepartmentMetricCard({ deptKey, stats, isSelected, onCli
       </div>
 
       {/* Numbers Breakdown */}
-      <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 font-medium">
+      <div className="flex items-center justify-between text-[10px] text-slate-600 font-medium leading-none">
         <span>Done: <strong className="text-emerald-700">{completed}</strong></span>
         <span>Pending: <strong className="text-amber-700">{total - completed}</strong></span>
       </div>

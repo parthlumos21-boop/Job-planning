@@ -139,7 +139,7 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-[#E2E8F0] text-xs font-semibold text-[#172B4D]">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[#1E3F66] font-bold uppercase">{deptName}</span>
+              <span className="text-[#0000AA] font-bold uppercase">{deptName}</span>
               <span className="text-[#E2E8F0]">•</span>
               <span className="font-bold">{user?.username}</span>
             </div>

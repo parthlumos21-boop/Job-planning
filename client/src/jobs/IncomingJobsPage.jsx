@@ -128,7 +128,7 @@ export default function IncomingJobsPage() {
           </p>
           <button
             onClick={() => navigate('/my-tasks')}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#1E3F66] hover:bg-[#163050] text-white rounded-xl text-xs font-bold transition-all mt-2 cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#0000AA] hover:bg-[#000088] text-white rounded-xl text-xs font-bold transition-all mt-2 cursor-pointer"
           >
             Go to My Tasks
           </button>

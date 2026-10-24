@@ -45,7 +45,7 @@ export default function Login() {
                 name="username"
                 type="text"
                 required
-                className="appearance-none relative block w-full px-4 py-3 border border-[#DCE5F0] placeholder-[#64748B]/60 text-[#172B4D] bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3F66]/20 focus:border-[#1E3F66] focus:z-10 text-sm font-medium"
+                className="appearance-none relative block w-full px-4 py-3 border border-[#DCE5F0] placeholder-[#64748B]/60 text-[#172B4D] bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000AA]/20 focus:border-[#0000AA] focus:z-10 text-sm font-medium"
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -56,7 +56,7 @@ export default function Login() {
                 name="password"
                 type="password"
                 required
-                className="appearance-none relative block w-full px-4 py-3 border border-[#DCE5F0] placeholder-[#64748B]/60 text-[#172B4D] bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3F66]/20 focus:border-[#1E3F66] focus:z-10 text-sm font-medium"
+                className="appearance-none relative block w-full px-4 py-3 border border-[#DCE5F0] placeholder-[#64748B]/60 text-[#172B4D] bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000AA]/20 focus:border-[#0000AA] focus:z-10 text-sm font-medium"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -67,7 +67,7 @@ export default function Login() {
           <div>
             <button
               type="submit"
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-[#1E3F66] hover:bg-[#163050] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1E3F66] shadow-xs transition-all cursor-pointer"
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-[#0000AA] hover:bg-[#000088] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0000AA] shadow-xs transition-all cursor-pointer"
             >
               Sign In
             </button>

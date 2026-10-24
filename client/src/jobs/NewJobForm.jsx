@@ -638,9 +638,9 @@ export default function NewJobForm() {
       )}
 
       {/* Top-Level Job Mode Selector (OUTSIDE Main Form Section) */}
-      <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-visible relative z-30 mb-4">
-        <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-900">
+      <div className="bg-white rounded-[9px] shadow-2xs border border-slate-200 overflow-visible relative z-30 mb-3">
+        <div className="px-3.5 py-1.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+          <h3 className="text-xs font-bold text-slate-800">
             Job Mode: Create New or Select Existing
           </h3>
           {selectedJobId && (
@@ -652,13 +652,13 @@ export default function NewJobForm() {
                 setDeptFields({});
                 setCurrentJob(null);
               }}
-              className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+              className="text-[11px] text-[#0000AA] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
             >
               + Switch to Create New Job (Blank)
             </button>
           )}
         </div>
-        <div className="p-3 bg-slate-50/40 overflow-visible">
+        <div className="p-2.5 bg-slate-50/30 overflow-visible">
           <SearchableJobSelect
             jobs={jobs}
             selectedJobId={selectedJobId}
@@ -1457,7 +1457,7 @@ export default function NewJobForm() {
             type="button"
             onClick={(e) => handleSubmit(e, false)}
             disabled={saving}
-            className="flex items-center gap-1.5 px-5 py-2 bg-[#1E3F66] hover:bg-[#163050] text-white rounded-[7px] text-xs font-semibold disabled:opacity-50 transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-5 py-2 bg-[#0000AA] hover:bg-[#000088] text-white rounded-[7px] text-xs font-semibold disabled:opacity-50 transition-all shadow-xs cursor-pointer"
           >
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
             <span>{saving ? 'Creating Job...' : 'Create Job'}</span>

@@ -77,7 +77,7 @@ export default function Sidebar({
                 <div className="text-[13px] font-bold text-[#1E293B] tracking-tight leading-tight">
                   Job Planning
                 </div>
-                <div className="text-[10px] text-[#1E3F66] font-bold uppercase tracking-wider">
+                <div className="text-[10px] text-[#0000AA] font-bold uppercase tracking-wider">
                   Tracking System
                 </div>
               </div>
@@ -119,7 +119,7 @@ export default function Sidebar({
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-[36px] pl-8 pr-7 text-[12px] bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-[#E2E8F0] rounded-[8px] focus:outline-none focus:ring-1 focus:ring-[#1E3F66] focus:border-[#1E3F66] text-slate-800 placeholder-slate-400 transition-all font-medium"
+                className="w-full h-[36px] pl-8 pr-7 text-[12px] bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-[#E2E8F0] rounded-[8px] focus:outline-none focus:ring-1 focus:ring-[#0000AA] focus:border-[#0000AA] text-slate-800 placeholder-slate-400 transition-all font-medium"
               />
               {searchQuery && (
                 <button
@@ -149,7 +149,7 @@ export default function Sidebar({
         {isExpanded ? (
           <div className="mx-3 my-2 px-2.5 py-1.5 rounded-[8px] bg-slate-50 border border-[#E2E8F0]/70 flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-bold text-[#1E3F66] uppercase tracking-wider truncate">
+              <div className="text-[10px] font-bold text-[#0000AA] uppercase tracking-wider truncate">
                 {deptName}
               </div>
               <div className="text-[12px] font-semibold text-slate-800 truncate flex items-center gap-1.5 mt-0.5">
@@ -161,7 +161,7 @@ export default function Sidebar({
         ) : (
           <div className="py-1 px-2 flex justify-center">
             <div
-              className="w-8 h-8 rounded-full bg-slate-100 border border-[#E2E8F0] text-[#1E3F66] font-bold text-[11px] flex items-center justify-center select-none"
+              className="w-8 h-8 rounded-full bg-slate-100 border border-[#E2E8F0] text-[#0000AA] font-bold text-[11px] flex items-center justify-center select-none"
               title={`${user?.username || 'User'} (${deptName})`}
             >
               {user?.username ? user.username.substring(0, 2).toUpperCase() : 'U'}
@@ -208,7 +208,7 @@ export default function Sidebar({
                     <span
                       className={`shrink-0 flex items-center justify-center transition-colors ${
                         active
-                          ? 'text-[#1E3F66]'
+                          ? 'text-[#0000AA]'
                           : 'text-slate-400 group-hover:text-slate-600'
                       }`}
                     >
@@ -228,7 +228,7 @@ export default function Sidebar({
                         className={`rounded-full font-bold transition-all ${
                           isExpanded
                             ? 'px-2 py-0.2 text-[10px] bg-slate-100 text-slate-700 border border-slate-200/90 ml-auto'
-                            : 'absolute top-1 right-1 w-4 h-4 p-0 flex items-center justify-center bg-[#1E3F66] text-white text-[9px] shadow-2xs ring-2 ring-white'
+                            : 'absolute top-1 right-1 w-4 h-4 p-0 flex items-center justify-center bg-[#0000AA] text-white text-[9px] shadow-2xs ring-2 ring-white'
                         }`}
                       >
                         {item.badge}
@@ -241,7 +241,7 @@ export default function Sidebar({
                     <div className="absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap z-50 pointer-events-none flex items-center gap-2 animate-in fade-in-50 duration-150">
                       <span>{item.label}</span>
                       {item.badge !== undefined && item.badge > 0 && (
-                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-[#1E3F66] text-white">
+                        <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-[#0000AA] text-white">
                           {item.badge}
                         </span>
                       )}

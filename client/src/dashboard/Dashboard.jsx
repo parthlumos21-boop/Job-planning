@@ -1,11 +1,11 @@
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import {
   Briefcase, Clock, CheckCircle2, Building,
   ArrowRightLeft, Layers, X,
-  RefreshCw, PlusCircle
+  RefreshCw, PlusCircle, ChevronRight, ChevronDown
 } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import DepartmentMetricCard from '../components/DepartmentMetricCard';
@@ -174,7 +174,7 @@ export default function Dashboard() {
 
           <button
             onClick={() => navigate('/jobs/new')}
-            className="inline-flex items-center gap-2 bg-[#1E3F66] hover:bg-[#163050] text-white font-bold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm cursor-pointer"
+            className="inline-flex items-center gap-2 bg-[#0000AA] hover:bg-[#000088] text-white font-bold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm cursor-pointer"
           >
             <PlusCircle size={17} />
             Create New Job
@@ -260,19 +260,30 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-          {TRACKED_DEPTS.map(deptKey => (
-            <DepartmentMetricCard
-              key={deptKey}
-              deptKey={deptKey}
-              stats={stats?.[deptKey]}
-              isSelected={selectedDept === deptKey}
-              onClick={() => {
-                if (isAdmin) {
-                  setSelectedDept(prev => prev === deptKey ? 'all' : deptKey);
-                }
-              }}
-            />
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-1.5 sm:gap-2">
+          {TRACKED_DEPTS.map((deptKey, idx) => (
+            <React.Fragment key={deptKey}>
+              <div className="flex-1 min-w-0">
+                <DepartmentMetricCard
+                  deptKey={deptKey}
+                  stats={stats?.[deptKey]}
+                  isSelected={selectedDept === deptKey}
+                  onClick={() => {
+                    if (isAdmin) {
+                      setSelectedDept(prev => prev === deptKey ? 'all' : deptKey);
+                    }
+                  }}
+                />
+              </div>
+              {idx < TRACKED_DEPTS.length - 1 && (
+                <div className="flex items-center justify-center shrink-0 text-slate-400 py-0.5 lg:py-0" title="Next Stage">
+                  <div className="p-1 rounded-full bg-slate-100/80 border border-slate-200/60 shadow-2xs">
+                    <ChevronRight size={13} className="hidden lg:block text-slate-500" strokeWidth={2.5} />
+                    <ChevronDown size={13} className="block lg:hidden text-slate-500" strokeWidth={2.5} />
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
           ))}
         </div>
       </div>

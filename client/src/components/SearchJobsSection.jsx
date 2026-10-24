@@ -121,17 +121,14 @@ export default function SearchJobsSection({
         </div>
 
         {/* Search Input & Optional Department Filter */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {isAdmin ? (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/70 border border-blue-200/60 rounded-xl text-xs font-medium text-blue-900 shrink-0">
-              <Filter size={14} className="text-blue-600 shrink-0" />
-              <label className="text-xs font-bold text-blue-900 uppercase tracking-wider whitespace-nowrap">
-                Dept:
-              </label>
+            <div className="inline-flex items-center gap-1.5 px-3 h-9 bg-blue-50/70 border border-blue-200/60 rounded-full text-xs font-medium text-blue-900 shrink-0">
+              <Filter size={13} className="text-blue-600 shrink-0" />
               <select
                 value={selectedDept}
                 onChange={(e) => onDeptChange && onDeptChange(e.target.value)}
-                className="bg-transparent text-xs font-bold text-blue-900 focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold text-blue-900 focus:outline-none cursor-pointer pr-1"
               >
                 {DEPARTMENT_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value} className="bg-white text-slate-800">
@@ -142,7 +139,7 @@ export default function SearchJobsSection({
             </div>
           ) : (
             userDeptName && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold border border-blue-100 shrink-0">
+              <div className="inline-flex items-center gap-1.5 px-3 h-9 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100 shrink-0">
                 <Building2 size={13} />
                 <span>{userDeptName}</span>
               </div>
@@ -151,13 +148,13 @@ export default function SearchJobsSection({
 
           {/* Single Global Search Input */}
           <div className="relative min-w-[280px] sm:w-96">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search by Job Number, Project, Customer, Panel, Engineer..."
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
-              className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs md:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+              className="w-full pl-9 pr-9 h-9 bg-slate-50 border border-slate-200 rounded-full text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0000AA]/20 focus:border-[#0000AA] transition-all font-medium"
             />
             {inputVal && (
               <button
@@ -165,7 +162,7 @@ export default function SearchJobsSection({
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                 title="Clear Search"
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             )}
           </div>
@@ -173,10 +170,10 @@ export default function SearchJobsSection({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer"
+            className="h-9 w-9 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-all cursor-pointer shrink-0"
             title="Refresh jobs"
           >
-            <RefreshCw size={15} className={loading ? 'animate-spin text-blue-600' : ''} />
+            <RefreshCw size={14} className={loading ? 'animate-spin text-[#0000AA]' : ''} />
           </button>
         </div>
       </div>
@@ -221,6 +218,7 @@ export default function SearchJobsSection({
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
+                  <th className="py-3 px-3.5 whitespace-nowrap text-slate-400 font-bold w-12 text-center">No</th>
                   <th className="py-3 px-3.5 whitespace-nowrap">Job Number</th>
                   <th className="py-3 px-3.5 whitespace-nowrap">Project Name</th>
                   <th className="py-3 px-3.5 whitespace-nowrap">Customer</th>
@@ -233,7 +231,7 @@ export default function SearchJobsSection({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {paginatedJobs.map((job) => {
+                {paginatedJobs.map((job, idx) => {
                   const isCompleted =
                     (job.lifecycleStatus || '').toLowerCase() === 'completed' ||
                     job.actualEndAt !== null ||
@@ -260,6 +258,11 @@ export default function SearchJobsSection({
                       onClick={() => navigate(`/jobs/${job.id}`)}
                       className="hover:bg-blue-50/40 transition-colors cursor-pointer"
                     >
+                      {/* 0. Sequential Number (No) */}
+                      <td className="py-3 px-3.5 whitespace-nowrap font-mono text-slate-400 text-xs text-center font-medium">
+                        {(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}
+                      </td>
+
                       {/* 1. Job Number (Clean database number) */}
                       <td className="py-3 px-3.5 whitespace-nowrap font-black text-blue-700 hover:text-blue-900 text-xs">
                         {cleanJobNo(job.jobNo)}
