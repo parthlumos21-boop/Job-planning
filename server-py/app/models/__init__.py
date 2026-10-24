@@ -7,6 +7,7 @@ class Account(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=False)
     password = Column(String(255), default="password123")
     role = Column(String(50), default="user")
@@ -28,6 +29,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(Integer, unique=True, index=True)
     name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=True)
     password = Column(String(255), default="password123")
     departments = Column(ARRAY(String), default=[])
     is_active = Column(Boolean, default=True)

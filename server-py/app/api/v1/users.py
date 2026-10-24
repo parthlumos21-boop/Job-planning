@@ -193,6 +193,23 @@ async def update_user(
             acc.password = body.password.strip()
             acc.hashed_password = hash_password(body.password.strip())
 
+        # Also sync matching User in users table if exists
+        u_stmt = select(User).where(
+            func.lower(User.name).in_([
+                old_name.lower(),
+                acc.username.lower(),
+                old_name.lower().replace(" ", ""),
+                acc.username.lower().replace(" ", "")
+            ])
+        )
+        u_res = await db.execute(u_stmt)
+        matched_user = u_res.scalars().first()
+        if matched_user:
+            if body.password and body.password.strip():
+                matched_user.password = body.password.strip()
+            if body.departments is not None:
+                matched_user.departments = acc.departments
+
         await db.commit()
         await db.refresh(acc)
 
@@ -225,25 +242,46 @@ async def update_user(
     if body.password and body.password.strip():
         u.password = body.password.strip()
 
-    # Also update matching Account if exists
-    acc_stmt = select(Account).where(
-        func.lower(Account.username).in_([old_name.lower(), u.name.lower()])
-    )
+    # Also update or create matching Account
+    name_variants = [
+        old_name.lower(),
+        old_name.lower().replace(" ", ""),
+        u.name.lower(),
+        u.name.lower().replace(" ", "")
+    ]
+    acc_stmt = select(Account).where(func.lower(Account.username).in_(name_variants))
     acc_res = await db.execute(acc_stmt)
     matching_acc = acc_res.scalars().first()
+
+    clean_new_password = body.password.strip() if (body.password and body.password.strip()) else None
+
     if matching_acc:
         if body.name and body.name.strip():
-            matching_acc.username = body.name.strip().lower()
+            # if username doesn't have spaces keep it clean
+            matching_acc.username = body.name.strip().lower().replace(" ", "") if " " in body.name else body.name.strip().lower()
         if body.departments is not None:
             matching_acc.departments = u.departments
         if body.role is not None:
             matching_acc.role = body.role.strip().lower()
-        if body.password and body.password.strip():
-            matching_acc.password = body.password.strip()
-            matching_acc.hashed_password = hash_password(body.password.strip())
+        if clean_new_password:
+            matching_acc.password = clean_new_password
+            matching_acc.hashed_password = hash_password(clean_new_password)
+    else:
+        # Create an account so this user can log in with new credentials
+        acc_username = u.name.strip().lower().replace(" ", "")
+        acc_pw = clean_new_password or u.password or "password123"
+        matching_acc = Account(
+            username=acc_username,
+            hashed_password=hash_password(acc_pw),
+            password=acc_pw,
+            role=body.role.strip().lower() if body.role else "user",
+            departments=u.departments or []
+        )
+        db.add(matching_acc)
 
     await db.commit()
     await db.refresh(u)
+    await db.refresh(matching_acc)
 
     user_role = (matching_acc.role if matching_acc and matching_acc.role else (body.role or "user")).capitalize()
 
@@ -254,7 +292,7 @@ async def update_user(
             "id": u.id,
             "externalId": u.external_id or u.id,
             "name": u.name,
-            "username": u.name,
+            "username": matching_acc.username if matching_acc else u.name.lower().replace(" ", ""),
             "departments": u.departments or [],
             "role": user_role,
             "password": u.password or (matching_acc.password if matching_acc else "password123"),

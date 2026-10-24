@@ -5,52 +5,52 @@ const DEPT_THEMES = {
   marketing: {
     name: 'Marketing',
     icon: Megaphone,
-    bgColor: 'bg-blue-50/70',
-    borderColor: 'border-blue-200',
-    activeRing: 'ring-2 ring-blue-500',
-    barColor: 'bg-blue-600',
-    textColor: 'text-blue-900',
-    badgeColor: 'bg-blue-100 text-blue-800'
+    bgColor: 'bg-blue-50/50 hover:bg-blue-50/80',
+    borderColor: 'border-blue-200/80',
+    activeRing: 'ring-2 ring-[#0000AA]',
+    barColor: 'bg-[#0000AA]',
+    textColor: 'text-blue-950',
+    badgeColor: 'bg-blue-100/80 text-blue-800'
   },
   design: {
     name: 'Electrical Design',
     icon: Compass,
-    bgColor: 'bg-emerald-50/70',
-    borderColor: 'border-emerald-200',
-    activeRing: 'ring-2 ring-emerald-500',
-    barColor: 'bg-emerald-600',
-    textColor: 'text-emerald-900',
-    badgeColor: 'bg-emerald-100 text-emerald-800'
+    bgColor: 'bg-indigo-50/50 hover:bg-indigo-50/80',
+    borderColor: 'border-indigo-200/80',
+    activeRing: 'ring-2 ring-indigo-600',
+    barColor: 'bg-indigo-600',
+    textColor: 'text-indigo-950',
+    badgeColor: 'bg-indigo-100/80 text-indigo-800'
   },
   mechanical: {
     name: 'Mechanical Design',
     icon: Settings,
-    bgColor: 'bg-purple-50/70',
-    borderColor: 'border-purple-200',
-    activeRing: 'ring-2 ring-purple-500',
-    barColor: 'bg-purple-600',
-    textColor: 'text-purple-900',
-    badgeColor: 'bg-purple-100 text-purple-800'
+    bgColor: 'bg-slate-50/80 hover:bg-slate-100/70',
+    borderColor: 'border-slate-300/80',
+    activeRing: 'ring-2 ring-slate-700',
+    barColor: 'bg-slate-700',
+    textColor: 'text-slate-900',
+    badgeColor: 'bg-slate-200/80 text-slate-800'
   },
   purchase: {
     name: 'Procurement',
     icon: ShoppingBag,
-    bgColor: 'bg-amber-50/70',
-    borderColor: 'border-amber-200',
-    activeRing: 'ring-2 ring-amber-500',
-    barColor: 'bg-amber-600',
-    textColor: 'text-amber-900',
-    badgeColor: 'bg-amber-100 text-amber-800'
+    bgColor: 'bg-sky-50/50 hover:bg-sky-50/80',
+    borderColor: 'border-sky-200/80',
+    activeRing: 'ring-2 ring-sky-600',
+    barColor: 'bg-sky-600',
+    textColor: 'text-sky-950',
+    badgeColor: 'bg-sky-100/80 text-sky-800'
   },
   production: {
     name: 'Production & QC',
     icon: Factory,
-    bgColor: 'bg-rose-50/70',
-    borderColor: 'border-rose-200',
-    activeRing: 'ring-2 ring-rose-500',
-    barColor: 'bg-rose-600',
-    textColor: 'text-rose-900',
-    badgeColor: 'bg-rose-100 text-rose-800'
+    bgColor: 'bg-blue-100/40 hover:bg-blue-100/70',
+    borderColor: 'border-blue-300/80',
+    activeRing: 'ring-2 ring-blue-700',
+    barColor: 'bg-blue-700',
+    textColor: 'text-blue-950',
+    badgeColor: 'bg-blue-200/80 text-blue-900'
   }
 };
 

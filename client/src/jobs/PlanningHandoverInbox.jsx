@@ -313,18 +313,9 @@ export default function PlanningHandoverInbox() {
             <Layers size={24} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                Job Planning Control Center
-              </h1>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Live Real-Time Sync
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
-              Control the transition of jobs into planning — verify inputs, establish ownership, resolve missing information, and release completed planning work.
-            </p>
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+              Job Planning Control Center
+            </h1>
           </div>
         </div>
 

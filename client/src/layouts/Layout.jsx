@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import Sidebar from '../components/Sidebar';
+import TopHeader from '../components/TopHeader';
 import {
   LayoutDashboard, PlusCircle,
   FileBarChart, User, LogOut, Activity, FileText,
@@ -134,25 +135,10 @@ export default function Layout() {
       <main className="relative flex-1 flex flex-col h-screen overflow-hidden bg-[#FFFFFF]">
 
         {/* Top Header */}
-        <header className="relative flex justify-end items-center px-6 py-3 bg-white border-b border-[#E2E8F0] shadow-2xs z-10">
-          {/* Right: User Department Pill & Logout */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-[#E2E8F0] text-xs font-semibold text-[#172B4D]">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[#0000AA] font-bold uppercase">{deptName}</span>
-              <span className="text-[#E2E8F0]">•</span>
-              <span className="font-bold">{user?.username}</span>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-1.5 text-slate-500 hover:text-[#B91C1C] hover:bg-[#FEE2E2] px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-transparent hover:border-[#E2E8F0] cursor-pointer"
-            >
-              <LogOut size={14} strokeWidth={1.8} />
-              <span>Logout</span>
-            </button>
-          </div>
-        </header>
+        <TopHeader
+          pendingCount={pendingHandoverCount + incomingJobsCount}
+          deptName={deptName}
+        />
 
         {/* Page Content */}
         <div className="relative flex-1 p-6 md:p-8 overflow-auto z-10 bg-[#FFFFFF]">

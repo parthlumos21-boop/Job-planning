@@ -849,7 +849,7 @@ export default function AdminOversightDashboard() {
               onChange={(e) => setFilters(prev => ({ ...prev, department: e.target.value }))}
               className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-700 capitalize"
             >
-              <option value="all">Dept: All</option>
+              <option value="all">All Departments</option>
               {uniqueDepartments.map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
@@ -1482,7 +1482,7 @@ export default function AdminOversightDashboard() {
                 onChange={(e) => setSelectedUserDept(e.target.value)}
                 className="pl-3 pr-8 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-2xs"
               >
-                <option value="all">🏢 Department: All Departments ({userAccountability.length})</option>
+                <option value="all">All Departments ({userAccountability.length})</option>
                 {userDepartmentOptions.map(dept => (
                   <option key={dept.name} value={dept.name}>
                     {dept.name} ({dept.count} Members {dept.active > 0 ? `• ${dept.active} Active` : ''})

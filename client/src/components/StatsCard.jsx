@@ -7,39 +7,42 @@ export default function StatsCard({
   subtitle
 }) {
   return (
-    <div className="bg-white rounded-[11px] border border-slate-200/90 p-2.5 sm:p-3 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between min-h-[140px] sm:min-h-[145px]">
-      {/* OUTER CARD HEADER: Title on left, small 13-14px outline icon on right */}
-      <div className="flex items-center justify-between px-0.5 pb-2.5">
-        <span className="text-[11px] font-medium text-slate-500 tracking-tight select-none">
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between min-h-[135px]">
+      {/* Top Header: Title & Stylized Icon Badge */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-slate-500 tracking-wider uppercase select-none truncate">
           {title}
         </span>
         {icon && (
-          <span className="text-slate-400 shrink-0 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-blue-50/80 border border-blue-100/90 text-[#0000AA] flex items-center justify-center shrink-0 shadow-2xs">
             {icon}
-          </span>
+          </div>
         )}
       </div>
 
-      {/* INNER KPI CONTAINER: Distinct nested border and inset */}
-      <div className="bg-slate-50/40 rounded-[8px] border border-slate-200/90 p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
-        {/* Main KPI Value */}
-        <div className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-900 leading-none pt-1">
-          {value !== undefined && value !== null ? value : 0}
-        </div>
+      {/* Main KPI Value */}
+      <div className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-slate-900 leading-none">
+        {value !== undefined && value !== null ? value : 0}
+      </div>
 
-        {/* Secondary Supporting Information */}
-        <div className="mt-3 flex items-center gap-1.5 text-[10px] leading-tight font-medium text-slate-400">
-          {trend && (
-            <span className={trendPositive ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}>
-              {trend}
-            </span>
-          )}
-          {subtitle && (
-            <span className="truncate">
-              {subtitle}
-            </span>
-          )}
-        </div>
+      {/* Secondary Supporting Information / Trend */}
+      <div className="mt-3 flex items-center gap-2 text-xs font-medium text-slate-500 flex-wrap">
+        {trend && (
+          <span
+            className={`px-1.5 py-0.5 rounded-md text-[11px] font-bold ${
+              trendPositive
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+            }`}
+          >
+            {trend}
+          </span>
+        )}
+        {subtitle && (
+          <span className="text-slate-400 text-xs truncate">
+            {subtitle}
+          </span>
+        )}
       </div>
     </div>
   );

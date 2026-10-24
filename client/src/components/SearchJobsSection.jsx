@@ -9,7 +9,7 @@ import { cleanJobNo } from '../config/marketingFormConfig';
 const ITEMS_PER_PAGE = 10;
 
 const DEPARTMENT_OPTIONS = [
-  { value: 'all', label: 'All Departments (Global Master)' },
+  { value: 'all', label: 'All Departments' },
   { value: 'marketing', label: 'Marketing' },
   { value: 'design', label: 'Design - Electrical' },
   { value: 'mechanical', label: 'Design - Mechanical' },
@@ -120,15 +120,15 @@ export default function SearchJobsSection({
           </p>
         </div>
 
-        {/* Search Input & Optional Department Filter */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Search Input & Compact Department Filter */}
+        <div className="flex flex-wrap items-center gap-2">
           {isAdmin ? (
-            <div className="inline-flex items-center gap-1.5 px-3 h-9 bg-blue-50/70 border border-blue-200/60 rounded-full text-xs font-medium text-blue-900 shrink-0">
-              <Filter size={13} className="text-blue-600 shrink-0" />
+            <div className="inline-flex items-center gap-1.5 px-2.5 h-8 bg-blue-50/70 border border-blue-200/70 rounded-full text-[11.5px] font-medium text-blue-900 shrink-0">
+              <Filter size={12} className="text-blue-600 shrink-0" />
               <select
                 value={selectedDept}
                 onChange={(e) => onDeptChange && onDeptChange(e.target.value)}
-                className="bg-transparent text-xs font-bold text-blue-900 focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent text-[11.5px] font-semibold text-blue-900 focus:outline-none cursor-pointer pr-1"
               >
                 {DEPARTMENT_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value} className="bg-white text-slate-800">
@@ -139,30 +139,30 @@ export default function SearchJobsSection({
             </div>
           ) : (
             userDeptName && (
-              <div className="inline-flex items-center gap-1.5 px-3 h-9 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100 shrink-0">
-                <Building2 size={13} />
+              <div className="inline-flex items-center gap-1.5 px-2.5 h-8 bg-blue-50 text-blue-700 rounded-full text-[11.5px] font-semibold border border-blue-100 shrink-0">
+                <Building2 size={12} />
                 <span>{userDeptName}</span>
               </div>
             )
           )}
 
-          {/* Single Global Search Input */}
-          <div className="relative min-w-[280px] sm:w-96">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          {/* Compact Global Search Input with High Border Radius */}
+          <div className="relative w-56 sm:w-64">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search by Job Number, Project, Customer, Panel, Engineer..."
+              placeholder="Search jobs..."
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
-              className="w-full pl-9 pr-9 h-9 bg-slate-50 border border-slate-200 rounded-full text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0000AA]/20 focus:border-[#0000AA] transition-all font-medium"
+              className="w-full pl-8 pr-7 h-8 bg-slate-50 border border-slate-200/90 rounded-full text-[11.5px] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0000AA] focus:border-[#0000AA] transition-all font-medium text-slate-800 placeholder-slate-400"
             />
             {inputVal && (
               <button
                 onClick={handleClear}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                 title="Clear Search"
               >
-                <X size={13} />
+                <X size={12} />
               </button>
             )}
           </div>
@@ -170,10 +170,10 @@ export default function SearchJobsSection({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="h-9 w-9 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-all cursor-pointer shrink-0"
+            className="h-8 w-8 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-all cursor-pointer shrink-0"
             title="Refresh jobs"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-[#0000AA]' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin text-[#0000AA]' : ''} />
           </button>
         </div>
       </div>

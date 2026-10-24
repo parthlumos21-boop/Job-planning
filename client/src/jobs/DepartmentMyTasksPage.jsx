@@ -213,8 +213,9 @@ export default function DepartmentMyTasksPage() {
             <select
               value={selectedDept}
               onChange={(e) => setSelectedDept(e.target.value)}
-              className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+              className="px-3 h-8 bg-white border border-slate-200/90 rounded-full text-[11.5px] font-semibold text-slate-800 focus:outline-none cursor-pointer"
             >
+              <option value="all">All Departments</option>
               <option value="marketing">Marketing</option>
               <option value="design">Design - Electrical</option>
               <option value="mechanical">Design - Mechanical</option>
@@ -292,14 +293,14 @@ export default function DepartmentMyTasksPage() {
       {/* Dynamic Filter Tabs & 5-Field Search Bar (Part 3) */}
       <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-56 sm:w-64">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by Job No, Customer, Panel, Task, User..."
-              className="w-full pl-9 pr-4 h-9 bg-slate-50 border border-slate-200 rounded-full text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-[#0000AA]/20 focus:border-[#0000AA] transition-all"
+              placeholder="Search tasks..."
+              className="w-full pl-8 pr-4 h-8 bg-slate-50 border border-slate-200/90 rounded-full text-[11.5px] font-medium text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:ring-1 focus:ring-[#0000AA] focus:border-[#0000AA] transition-all"
             />
           </div>
 

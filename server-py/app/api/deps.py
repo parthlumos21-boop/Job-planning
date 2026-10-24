@@ -28,6 +28,7 @@ async def get_current_user(
         role=payload.get("role", "user"),
         departments=payload.get("departments", []),
         name=payload.get("name") or payload.get("username", ""),
+        email=payload.get("email"),
         id=payload.get("id")
     )
 

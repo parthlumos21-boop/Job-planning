@@ -409,7 +409,7 @@ export default function UserManagementPage() {
                     </div>
                   </div>
 
-                  {/* Department & Role Details (Plain Text per Changes-7) */}
+                  {/* Department, Role & Password Details */}
                   <div className="space-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
                     <div className="flex items-baseline gap-1 text-slate-600">
                       <span className="font-semibold text-slate-500 shrink-0">Department:</span>
@@ -429,43 +429,43 @@ export default function UserManagementPage() {
                         </span>
                       )}
                     </div>
+
+                    {/* Password Field inside Department and Role section */}
+                    <div className="flex items-center gap-1 text-slate-600 pt-0.5">
+                      <span className="font-semibold text-slate-500 shrink-0">Password:</span>
+                      <span className="font-mono text-xs font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded-[5px] border border-slate-200 select-all truncate">
+                        {isRevealed ? (user.password || 'password123') : '••••••••'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => togglePassword(user.uniqueKey)}
+                        className="p-1 text-slate-400 hover:text-[#0000AA] rounded hover:bg-blue-50 transition-colors cursor-pointer shrink-0"
+                        title={isRevealed ? "Hide password" : "Show real password from PostgreSQL"}
+                      >
+                        {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Password Line & Action Icons (Delete & Pencil on Bottom Right) */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-semibold text-slate-500 shrink-0">Password:</span>
-                    <span className="font-mono text-xs font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded-[5px] border border-slate-200 select-all truncate">
-                      {isRevealed ? (user.password || 'password123') : '••••••••'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => togglePassword(user.uniqueKey)}
-                      className="p-1 text-slate-400 hover:text-[#0000AA] rounded hover:bg-blue-50 transition-colors cursor-pointer shrink-0"
-                      title={isRevealed ? "Hide password" : "Show real password from PostgreSQL"}
-                    >
-                      {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-
-                  {/* Bottom Right Actions: Delete & Edit Pencil */}
-                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                {/* Bottom Action Row: Delete & Edit Pencil */}
+                <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-end text-xs">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => handleDeleteUser(user)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                       title={`Delete ${user.name}`}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={15} />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(user)}
-                      className="p-1.5 text-slate-400 hover:text-[#0000AA] hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-[#0000AA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                       title={`Edit ${user.name}`}
                     >
-                      <Pencil size={14} />
+                      <Pencil size={15} />
                     </button>
                   </div>
                 </div>

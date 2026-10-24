@@ -145,29 +145,7 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* User / Department Context Pill */}
-        {isExpanded ? (
-          <div className="mx-3 my-2 px-2.5 py-1.5 rounded-[8px] bg-slate-50 border border-[#E2E8F0]/70 flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-bold text-[#0000AA] uppercase tracking-wider truncate">
-                {deptName}
-              </div>
-              <div className="text-[12px] font-semibold text-slate-800 truncate flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                <span className="truncate">{user?.username}</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-1 px-2 flex justify-center">
-            <div
-              className="w-8 h-8 rounded-full bg-slate-100 border border-[#E2E8F0] text-[#0000AA] font-bold text-[11px] flex items-center justify-center select-none"
-              title={`${user?.username || 'User'} (${deptName})`}
-            >
-              {user?.username ? user.username.substring(0, 2).toUpperCase() : 'U'}
-            </div>
-          </div>
-        )}
+
 
         {/* Navigation Items List */}
         <nav className="flex-1 px-2 py-1.5 space-y-0.5 overflow-y-auto overflow-x-hidden">

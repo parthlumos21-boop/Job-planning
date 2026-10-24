@@ -10,6 +10,7 @@ class UserPayload(BaseModel):
     role: str
     departments: list[str] = []
     name: Optional[str] = None
+    email: Optional[str] = None
     id: Optional[int] = None
 
 class TokenResponse(BaseModel):

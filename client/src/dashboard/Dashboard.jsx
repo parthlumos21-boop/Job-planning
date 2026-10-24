@@ -127,60 +127,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8 pb-12">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            Job Planning Dashboard
-            <button
-              onClick={fetchData}
-              disabled={refreshing}
-              className={`p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all ${refreshing ? 'animate-spin' : ''}`}
-              title="Refresh Data"
-            >
-              <RefreshCw size={17} />
-            </button>
-          </h1>
-          <p className="text-sm text-slate-500 mt-1 font-medium">
-            {isAdmin
-              ? 'Real-time departmental workflow tracking & master job register'
-              : `${primaryDept ? primaryDept.toUpperCase() : 'Department'} live workflow & project records`}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {isAdmin && (
-            <button
-              onClick={() => navigate('/jobs/handover')}
-              className="relative inline-flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3.5 py-2.5 rounded-xl border border-indigo-200 transition-all text-sm"
-            >
-              <ArrowRightLeft size={16} />
-              Planning Control Center
-              {pendingHandoversCount > 0 && (
-                <span className="bg-amber-500 text-white text-[11px] font-black px-1.5 py-0.5 rounded-full shadow-xs">
-                  {pendingHandoversCount}
-                </span>
-              )}
-            </button>
-          )}
-
-          <button
-            onClick={() => navigate('/my-jobs')}
-            className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 transition-all text-sm"
-          >
-            <Layers size={16} />
-            My Jobs
-          </button>
-
-          <button
-            onClick={() => navigate('/jobs/new')}
-            className="inline-flex items-center gap-2 bg-[#0000AA] hover:bg-[#000088] text-white font-bold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm cursor-pointer"
-          >
-            <PlusCircle size={17} />
-            Create New Job
-          </button>
-        </div>
-      </div>
 
       {/* Handover Attention Banner */}
       {pendingHandoversCount > 0 && (
@@ -209,12 +155,42 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Top Action Bar (Above KPI Cards, Right-Aligned, Responsive) */}
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5 mb-3.5">
+        {/* Pill Button: Refresh Data */}
+        <button
+          onClick={fetchData}
+          disabled={refreshing}
+          className={`h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer shrink-0 ${
+            refreshing ? 'opacity-70' : ''
+          }`}
+          title="Refresh Data"
+        >
+          <RefreshCw
+            size={13}
+            strokeWidth={2}
+            className={`text-slate-500 ${refreshing ? 'animate-spin text-[#0000AA]' : ''}`}
+          />
+          <span className="whitespace-nowrap">Refresh Data</span>
+        </button>
+
+        {/* Pill Button: Create Job */}
+        <button
+          onClick={() => navigate('/jobs/new')}
+          className="h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-bold text-white bg-[#0000AA] hover:bg-blue-900 shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
+          title="Create Job"
+        >
+          <PlusCircle size={15} strokeWidth={2.2} />
+          <span className="whitespace-nowrap">Create Job</span>
+        </button>
+      </div>
+
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <StatsCard
           title="Total Registered Jobs"
           value={totalJobsCount}
-          icon={<Briefcase size={14} strokeWidth={1.75} />}
+          icon={<Briefcase size={18} strokeWidth={2} />}
           trend="+5.3%"
           trendPositive={true}
           subtitle="vs last 30 days"
@@ -222,71 +198,78 @@ export default function Dashboard() {
         <StatsCard
           title="In Progress / Pending"
           value={inProgressJobsCount}
-          icon={<Clock size={14} strokeWidth={1.75} />}
+          icon={<Clock size={18} strokeWidth={2} />}
           subtitle="Current active jobs"
         />
         <StatsCard
           title="Completed & Dispatched"
           value={completedJobsCount}
-          icon={<CheckCircle2 size={14} strokeWidth={1.75} />}
+          icon={<CheckCircle2 size={18} strokeWidth={2} />}
           subtitle="Completed jobs"
         />
         <StatsCard
           title="Active Clients"
           value={uniqueClientsCount || 10}
-          icon={<Building size={14} strokeWidth={1.75} />}
+          icon={<Building size={18} strokeWidth={2} />}
           subtitle="Active customers"
         />
       </div>
 
-      {/* Department Pipeline Cards Grid (for Admins or Department Context) */}
-      <div>
-        <div className="flex items-center justify-between mb-3.5">
-          <div>
-            <h2 className="text-base font-bold text-slate-800">Department Workflow Pipeline</h2>
-            <p className="text-xs text-slate-500">
-              {isAdmin
-                ? 'Click any card to filter jobs by department'
-                : 'Live departmental progress and status metrics'}
-            </p>
+      {/* Connected Node-to-Node Pipeline Container */}
+      <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
+        {/* Internal Header */}
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Department Workflow Pipeline
+            </h2>
           </div>
           {isAdmin && selectedDept !== 'all' && (
             <button
               onClick={() => setSelectedDept('all')}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60"
             >
-              <X size={13} /> Clear Department Filter
+              <X size={12} /> Clear Filter
             </button>
           )}
         </div>
-
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-1.5 sm:gap-2">
-          {TRACKED_DEPTS.map((deptKey, idx) => (
-            <React.Fragment key={deptKey}>
-              <div className="flex-1 min-w-0">
-                <DepartmentMetricCard
-                  deptKey={deptKey}
-                  stats={stats?.[deptKey]}
-                  isSelected={selectedDept === deptKey}
-                  onClick={() => {
-                    if (isAdmin) {
-                      setSelectedDept(prev => prev === deptKey ? 'all' : deptKey);
-                    }
-                  }}
-                />
-              </div>
-              {idx < TRACKED_DEPTS.length - 1 && (
-                <div className="flex items-center justify-center shrink-0 text-slate-400 py-0.5 lg:py-0" title="Next Stage">
-                  <div className="p-1 rounded-full bg-slate-100/80 border border-slate-200/60 shadow-2xs">
-                    <ChevronRight size={13} className="hidden lg:block text-slate-500" strokeWidth={2.5} />
-                    <ChevronDown size={13} className="block lg:hidden text-slate-500" strokeWidth={2.5} />
-                  </div>
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center">
+            {TRACKED_DEPTS.map((deptKey, idx) => (
+              <React.Fragment key={deptKey}>
+                {/* Node Card */}
+                <div className="flex-1 min-w-0 relative">
+                  <DepartmentMetricCard
+                    deptKey={deptKey}
+                    stats={stats?.[deptKey]}
+                    isSelected={selectedDept === deptKey}
+                    onClick={() => {
+                      if (isAdmin) {
+                        setSelectedDept(prev => prev === deptKey ? 'all' : deptKey);
+                      }
+                    }}
+                  />
                 </div>
-              )}
-            </React.Fragment>
-          ))}
+
+                {/* Connected Pipeline Edge */}
+                {idx < TRACKED_DEPTS.length - 1 && (
+                  <div className="relative flex items-center justify-center shrink-0 my-1 lg:my-0 lg:w-8 xl:w-10 h-7 lg:h-auto" title="Pipeline Flow">
+                    {/* Horizontal Pipeline Pipe (Desktop) */}
+                    <div className="hidden lg:block absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-slate-300 via-blue-400 to-slate-300 rounded-full" />
+                    
+                    {/* Vertical Pipeline Pipe (Mobile) */}
+                    <div className="block lg:hidden absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-gradient-to-b from-slate-300 via-blue-400 to-slate-300 rounded-full" />
+
+                    {/* Edge Node Badge with Directional Arrow */}
+                    <div className="relative z-10 w-6 h-6 rounded-full bg-white border-2 border-blue-600 shadow-xs flex items-center justify-center text-blue-600 transition-transform duration-200 hover:scale-110">
+                      <ChevronRight size={13} className="hidden lg:block text-blue-600" strokeWidth={2.5} />
+                      <ChevronDown size={13} className="block lg:hidden text-blue-600" strokeWidth={2.5} />
+                    </div>
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
-      </div>
 
       {/* Universal Search Jobs Section (Visual Reference 9 Columns & Blue-and-White Theme) */}
       <SearchJobsSection
