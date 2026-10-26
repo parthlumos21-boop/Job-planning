@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Check, X, Building, User, PlusCircle } from 'lucide-react';
+import { Search, ChevronDown, Check, X, PlusCircle } from 'lucide-react';
 
 export default function SearchableJobSelect({
   jobs = [],
@@ -136,19 +136,19 @@ export default function SearchableJobSelect({
           </div>
 
           {/* Quick Option: Blank Job */}
-          <div className="p-1 border-b border-slate-100 bg-blue-50/40">
+          <div className="p-1 border-b border-slate-100 bg-blue-50/30">
             <button
               type="button"
               onClick={handleResetToNew}
-              className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center justify-between transition-colors ${
+              className={`w-full text-left px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center justify-between transition-colors ${
                 !selectedJobId ? 'bg-blue-100/70 text-[#0000AA]' : 'text-blue-700 hover:bg-blue-100/50'
               }`}
             >
               <div className="flex items-center gap-1.5">
-                <PlusCircle size={13} />
+                <PlusCircle size={12} />
                 <span>+ Create New Job (Blank Form)</span>
               </div>
-              {!selectedJobId && <Check size={13} className="text-[#0000AA]" />}
+              {!selectedJobId && <Check size={12} className="text-[#0000AA]" />}
             </button>
           </div>
 
@@ -170,54 +170,43 @@ export default function SearchableJobSelect({
                   <div
                     key={j.id}
                     onClick={() => handleSelect(j)}
-                    className={`p-2 rounded-md cursor-pointer transition-all ${
+                    className={`px-2.5 py-1.5 rounded-md cursor-pointer transition-all ${
                       isSelected
-                        ? 'bg-blue-50/80 border border-blue-200'
+                        ? 'bg-blue-50/90 border border-blue-200'
                         : 'hover:bg-slate-50 border border-transparent'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="font-bold text-[11px] text-slate-900 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
-                            Job {j.jobNo}
-                          </span>
-                          <span className="font-bold text-xs text-blue-900 truncate">
-                            {j.panelName || 'Unnamed Panel'}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-slate-500 mt-0.5">
-                          {j.clientName && (
-                            <div className="flex items-center gap-1 truncate">
-                              <Building size={11} className="text-slate-400 shrink-0" />
-                              <span className="truncate">{j.clientName}</span>
-                            </div>
-                          )}
-                          {j.responsibleEnggName && (
-                            <div className="flex items-center gap-1 truncate">
-                              <User size={11} className="text-slate-400 shrink-0" />
-                              <span className="truncate">Engg: {j.responsibleEnggName}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {j.projectName && (
-                          <div className="text-[9.5px] text-slate-400 truncate mt-0.5">
-                            Project: {j.projectName}
-                          </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                        <span className="font-bold text-[10px] text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                          #{j.jobNo}
+                        </span>
+                        <span className="font-bold text-[11.5px] text-slate-900 truncate">
+                          {j.panelName || 'Unnamed Panel'}
+                        </span>
+                        {j.clientName && (
+                          <>
+                            <span className="text-slate-300 hidden sm:inline">•</span>
+                            <span className="text-[11px] text-slate-600 truncate">{j.clientName}</span>
+                          </>
+                        )}
+                        {j.responsibleEnggName && (
+                          <>
+                            <span className="text-slate-300 hidden sm:inline">•</span>
+                            <span className="text-[10px] text-slate-400 truncate">Engg: {j.responsibleEnggName}</span>
+                          </>
                         )}
                       </div>
 
-                      <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         {j.department && (
-                          <span className="px-1 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                          <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
                             {j.department}
                           </span>
                         )}
                         {isSelected && (
-                          <div className="w-4 h-4 rounded-full bg-[#0000AA] text-white flex items-center justify-center shrink-0">
-                            <Check size={10} strokeWidth={3} />
+                          <div className="w-3.5 h-3.5 rounded-full bg-[#0000AA] text-white flex items-center justify-center shrink-0">
+                            <Check size={9} strokeWidth={3} />
                           </div>
                         )}
                       </div>

@@ -4,7 +4,7 @@ import api from '../services/api';
 import {
   History, Activity, Search, RefreshCw, Layers, Clock,
   CheckCircle2, AlertCircle, FileText, Send, UserCheck,
-  ArrowRightLeft, PlusCircle, ShieldCheck
+  ArrowRightLeft, PlusCircle, ShieldCheck, ChevronDown
 } from 'lucide-react';
 
 export const normalizeDepartment = (deptStr) => {
@@ -115,6 +115,51 @@ export default function LiveActivityDashboard() {
       return true;
     });
   }, [activities, selectedDept, search]);
+
+  // Group filtered activities chronologically by date
+  const groupedActivities = useMemo(() => {
+    const groups = {};
+    const today = new Date();
+    const todayStr = today.toDateString();
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+
+    filteredActivities.forEach(act => {
+      const d = act.timestamp ? new Date(act.timestamp) : null;
+      let dateKey = 'Earlier';
+      let sortKey = 0;
+
+      if (d && !isNaN(d.getTime())) {
+        sortKey = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const actDateStr = d.toDateString();
+        if (actDateStr === todayStr) {
+          dateKey = 'Today';
+        } else if (actDateStr === yesterdayStr) {
+          dateKey = 'Yesterday';
+        } else {
+          dateKey = d.toLocaleDateString(undefined, {
+            weekday: 'short',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          });
+        }
+      }
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = {
+          label: dateKey,
+          sortKey: sortKey,
+          items: []
+        };
+      }
+      groups[dateKey].items.push(act);
+    });
+
+    return Object.values(groups).sort((a, b) => b.sortKey - a.sortKey);
+  }, [filteredActivities]);
 
   // KPI Calculations
   const stats = useMemo(() => {
@@ -298,85 +343,128 @@ export default function LiveActivityDashboard() {
         </div>
       ) : activeTab === 'stream' ? (
         
-        /* TAB 1: DEPARTMENT-WISE ACTIVITY STREAM */
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+        /* TAB 1: DEPARTMENT-WISE ACTIVITY STREAM (CHRONOLOGICAL TIMELINE) */
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
             <div>
               <h2 className="text-sm font-bold text-slate-900 tracking-tight">Department-Wise Activity Feed</h2>
               <p className="text-xs text-slate-500">Live timeline of job actions created across all departments</p>
             </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 self-start sm:self-auto">
               {filteredActivities.length} Events
             </span>
           </div>
 
           {filteredActivities.length === 0 ? (
-            <div className="p-16 text-center text-xs text-slate-400">
-              No activity logs recorded matching your department and search parameters.
+            <div className="py-16 text-center text-xs space-y-1">
+              <p className="font-bold text-slate-700 text-sm">No activity records found.</p>
+              <p className="text-slate-400">Try changing the search or department filter.</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {filteredActivities.map((act, idx) => {
-                const normDept = normalizeDepartment(act.department);
-                const deptMeta = DEPT_CONFIG[normDept] || { label: normDept.toUpperCase(), badge: 'bg-slate-100 text-slate-700 border-slate-200' };
-                const icon = ACTION_ICONS[act.action] || <Activity size={14} className="text-slate-600" />;
-                const who = act.performedBy || act.performed_by || act.updated_by || 'Admin';
-
-                return (
-                  <div key={act.id || idx} className="p-4 hover:bg-slate-50/70 transition-colors flex items-start gap-3.5 text-xs">
-                    <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700 shrink-0 mt-0.5">
-                      {icon}
+            <div className="space-y-8">
+              {groupedActivities.map((group) => (
+                <div key={group.label} className="space-y-4">
+                  {/* Date Group Heading with count badge */}
+                  <div className="flex items-center justify-between px-1 py-1">
+                    <div className="flex items-center gap-2">
+                      <ChevronDown size={15} className="text-slate-400" />
+                      <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        {group.label}
+                      </h3>
                     </div>
+                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                      {group.items.length}
+                    </span>
+                  </div>
 
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            to={`/jobs/${act.jobId}`}
-                            className="font-bold text-indigo-600 hover:text-indigo-800 text-xs"
-                          >
-                            #{act.jobNo}
-                          </Link>
-                          <span className="font-semibold text-slate-900">{act.panelName || 'Panel'}</span>
-                          {act.clientName && (
-                            <span className="text-slate-400 text-[11px]">({act.clientName})</span>
-                          )}
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${deptMeta.badge}`}>
-                            {deptMeta.label}
-                          </span>
-                        </div>
+                  {/* Chronological Vertical Timeline */}
+                  <div className="relative pl-6 sm:pl-28">
+                    {/* Continuous vertical guideline running down */}
+                    <div className="absolute left-[11px] sm:left-[95px] top-4 bottom-4 w-[2px] bg-slate-200" />
 
-                        <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
-                          <Clock size={11} />
-                          {act.timestamp ? new Date(act.timestamp).toLocaleString() : '—'}
-                        </span>
-                      </div>
+                    <div className="space-y-3.5">
+                      {group.items.map((act, idx) => {
+                        const normDept = normalizeDepartment(act.department);
+                        const deptMeta = DEPT_CONFIG[normDept] || { label: normDept.toUpperCase(), badge: 'bg-slate-100 text-slate-700 border-slate-200' };
+                        const icon = ACTION_ICONS[act.action] || <Activity size={14} className="text-slate-600" />;
+                        const who = act.performedBy || act.performed_by || act.updated_by || 'Admin';
 
-                      {/* Action & Who */}
-                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                        <span className="font-extrabold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
-                          {(act.action || 'ACTIVITY').replace(/_/g, ' ')}
-                        </span>
-                        <span className="text-slate-600">
-                          <strong>User:</strong> <span className="font-bold text-slate-900">{who}</span>
-                        </span>
-                        {act.category && (
-                          <span className="text-slate-500 font-medium">
-                            • Reason: <strong>{act.category}</strong>
-                          </span>
-                        )}
-                      </div>
+                        const actDate = act.timestamp ? new Date(act.timestamp) : null;
+                        const timeStr = actDate && !isNaN(actDate.getTime())
+                          ? actDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                          : '—';
+                        const fullDateStr = actDate && !isNaN(actDate.getTime())
+                          ? actDate.toLocaleString()
+                          : '—';
 
-                      {/* Notes / Details */}
-                      {act.notes && (
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 font-mono text-[11px] text-slate-700 whitespace-pre-wrap max-w-3xl">
-                          {act.notes}
-                        </div>
-                      )}
+                        return (
+                          <div key={act.id || idx} className="relative group">
+                            {/* Time label on the left (visible on sm+ screens) */}
+                            <div className="hidden sm:block absolute -left-28 top-3 w-20 text-right text-[11px] font-mono text-slate-500 font-semibold select-none">
+                              {timeStr}
+                            </div>
+
+                            {/* Circular timeline node marker on the vertical line */}
+                            <div className="absolute -left-[18px] sm:-left-[22px] top-3.5 w-3 h-3 rounded-full bg-blue-600 ring-4 ring-white shadow-2xs z-10" />
+
+                            {/* Compact Horizontal Activity Card */}
+                            <div className="bg-white rounded-xl border border-slate-200/90 hover:border-slate-300 p-3.5 shadow-2xs hover:shadow-xs transition-all space-y-2">
+                              {/* Top row: Job ID, Panel, Client, Department Badge, Timestamp */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  <div className="p-1 rounded-md bg-slate-100 text-slate-700 shrink-0">
+                                    {icon}
+                                  </div>
+                                  <Link
+                                    to={`/jobs/${act.jobId}`}
+                                    className="font-bold text-indigo-600 hover:text-indigo-800 text-xs"
+                                  >
+                                    #{act.jobNo}
+                                  </Link>
+                                  <span className="font-semibold text-slate-900">{act.panelName || 'Panel'}</span>
+                                  {act.clientName && (
+                                    <span className="text-slate-400 text-[11px]">({act.clientName})</span>
+                                  )}
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${deptMeta.badge}`}>
+                                    {deptMeta.label}
+                                  </span>
+                                </div>
+
+                                <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1 shrink-0">
+                                  <Clock size={11} />
+                                  {fullDateStr}
+                                </span>
+                              </div>
+
+                              {/* Secondary row: Action Badge & User */}
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] pl-0.5">
+                                <span className="font-extrabold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
+                                  {(act.action || 'ACTIVITY').replace(/_/g, ' ')}
+                                </span>
+                                <span className="text-slate-600">
+                                  <strong>User:</strong> <span className="font-bold text-slate-900">{who}</span>
+                                </span>
+                                {act.category && (
+                                  <span className="text-slate-500 font-medium">
+                                    • Reason: <strong>{act.category}</strong>
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Notes / Details */}
+                              {act.notes && (
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 font-mono text-[11px] text-slate-700 whitespace-pre-wrap max-w-3xl">
+                                  {act.notes}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>

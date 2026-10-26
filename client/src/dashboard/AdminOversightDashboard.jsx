@@ -130,12 +130,13 @@ export default function AdminOversightDashboard() {
 
   // Active KPI Card filter
   const [activeKpiFilter, setActiveKpiFilter] = useState(null);
-  const [showFormulaRulesModal, setShowFormulaRulesModal] = useState(false);
 
   // Section 5: Users Workload & Delay Department & Search States
   const [selectedUserDept, setSelectedUserDept] = useState('all');
   const [userSearchText, setUserSearchText] = useState('');
   const [onlyUsersWithWork, setOnlyUsersWithWork] = useState(false);
+  const [userWorkloadPage, setUserWorkloadPage] = useState(1);
+  const USER_WORKLOAD_PAGE_SIZE = 10;
 
   // Column Settings (Show/Hide Table Columns)
   const [columnVisibility, setColumnVisibility] = useState({
@@ -382,6 +383,16 @@ export default function AdminOversightDashboard() {
 
     return list;
   }, [userAccountability, selectedUserDept, userSearchText, onlyUsersWithWork]);
+
+  const totalWorkloadPages = Math.ceil(filteredUserWorkload.length / USER_WORKLOAD_PAGE_SIZE) || 1;
+  const paginatedUserWorkload = useMemo(() => {
+    const start = (userWorkloadPage - 1) * USER_WORKLOAD_PAGE_SIZE;
+    return filteredUserWorkload.slice(start, start + USER_WORKLOAD_PAGE_SIZE);
+  }, [filteredUserWorkload, userWorkloadPage]);
+
+  useEffect(() => {
+    setUserWorkloadPage(1);
+  }, [selectedUserDept, userSearchText, onlyUsersWithWork]);
 
   // Selected Department Aggregated Summary
   const selectedDeptStats = useMemo(() => {
@@ -813,7 +824,7 @@ export default function AdminOversightDashboard() {
               </span>
             </div>
             <button
-              onClick={() => setShowFormulaRulesModal(true)}
+              onClick={() => navigate('/admin-oversight/formula-rules')}
               className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
               title="Configure Dynamic Formula Rules"
             >
@@ -1561,117 +1572,163 @@ export default function AdminOversightDashboard() {
           </div>
         </div>
 
-        {/* Table Display with Column 1: Users Workload and Delay */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700 uppercase text-[10px] font-extrabold tracking-wider whitespace-nowrap">
-                <th className="py-2.5 px-3 font-black text-slate-900">Users Workload and Delay</th>
-                <th className="py-2.5 px-3">Department</th>
-                <th className="py-2.5 px-3 text-center">Active Jobs</th>
-                <th className="py-2.5 px-3 text-center">Overdue</th>
-                <th className="py-2.5 px-3 text-center">Completed</th>
-                <th className="py-2.5 px-3 text-center">Completed Late</th>
-                <th className="py-2.5 px-3 text-center">Reassigned To</th>
-                <th className="py-2.5 px-3">Oldest Active Job</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredUserWorkload.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
-                    <span>No members match the selected department or search filter.</span>
-                  </td>
-                </tr>
-              ) : (
-                filteredUserWorkload.map(u => {
-                  const hasActive = (u.activeJobs || 0) > 0;
-                  const hasOverdue = (u.overdueJobs || 0) > 0;
+        {/* Cards Grid Display for Users Workload and Delay */}
+        {filteredUserWorkload.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+            <span>No members match the selected department or search filter.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
+            {paginatedUserWorkload.map(u => {
+              const hasActive = (u.activeJobs || 0) > 0;
+              const hasOverdue = (u.overdueJobs || 0) > 0;
 
-                  return (
-                    <tr
-                      key={u.userId}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        hasOverdue ? 'bg-rose-50/20' : hasActive ? 'bg-indigo-50/15' : ''
-                      }`}
-                    >
-                      {/* Users Workload and Delay (Employee Name) */}
-                      <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <span>{u.userName}</span>
-                          {hasActive && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="Active backlog"></span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Department */}
-                      <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+              return (
+                <div
+                  key={u.userId}
+                  className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                    hasOverdue
+                      ? 'bg-rose-50/30 border-rose-200 hover:border-rose-300 shadow-2xs'
+                      : hasActive
+                        ? 'bg-white border-indigo-200 hover:border-indigo-300 shadow-2xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                  }`}
+                >
+                  {/* Card Header: User Name + Department */}
+                  <div>
+                    <div className="flex items-center justify-between gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs truncate">
+                        {hasActive && (
+                          <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" title="Active backlog" />
+                        )}
+                        <span className="truncate">{u.userName}</span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
                         {u.department}
-                      </td>
+                      </span>
+                    </div>
 
-                      {/* Active Jobs */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        {hasActive ? (
-                          <button
-                            onClick={() => setFilters(prev => ({ ...prev, search: u.userName, jobStatus: 'active' }))}
-                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 hover:bg-indigo-200 cursor-pointer"
-                            title="Click to filter table above for this user's active jobs"
-                          >
-                            {u.activeJobs} Active
-                          </button>
-                        ) : (
-                          <span className="text-slate-400 font-medium">0</span>
-                        )}
-                      </td>
+                    {/* Workload Status Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      {hasActive ? (
+                        <button
+                          type="button"
+                          onClick={() => setFilters(prev => ({ ...prev, search: u.userName, jobStatus: 'active' }))}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 hover:bg-indigo-200 cursor-pointer transition-colors"
+                          title="Click to filter table above for this user's active jobs"
+                        >
+                          {u.activeJobs} Active
+                        </button>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">
+                          0 Active
+                        </span>
+                      )}
 
-                      {/* Overdue */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        {hasOverdue ? (
-                          <button
-                            onClick={() => setFilters(prev => ({ ...prev, search: u.userName, delayStatus: 'OVERDUE' }))}
-                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 hover:bg-rose-200 cursor-pointer"
-                            title="Click to filter table above for this user's overdue jobs"
-                          >
-                            {u.overdueJobs} Overdue
-                          </button>
-                        ) : (
-                          <span className="text-slate-400 font-medium">0</span>
-                        )}
-                      </td>
+                      {hasOverdue ? (
+                        <button
+                          type="button"
+                          onClick={() => setFilters(prev => ({ ...prev, search: u.userName, delayStatus: 'OVERDUE' }))}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 hover:bg-rose-200 cursor-pointer transition-colors"
+                          title="Click to filter table above for this user's overdue jobs"
+                        >
+                          {u.overdueJobs} Overdue
+                        </button>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">
+                          On Track
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                      {/* Completed */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap font-semibold text-emerald-700">
-                        {u.completedJobs || 0}
-                      </td>
+                  {/* Operational Metrics Grid */}
+                  <div className="pt-2 border-t border-slate-100/90 grid grid-cols-3 gap-1 text-center text-[10px]">
+                    <div className="bg-slate-50 p-1.5 rounded">
+                      <span className="text-slate-400 block text-[9px] uppercase font-bold">Done</span>
+                      <span className="font-extrabold text-emerald-700 text-xs">{u.completedJobs || 0}</span>
+                    </div>
+                    <div className="bg-slate-50 p-1.5 rounded">
+                      <span className="text-slate-400 block text-[9px] uppercase font-bold">Late</span>
+                      <span className="font-extrabold text-rose-700 text-xs">{u.completedLate || u.completedLateJobs || 0}</span>
+                    </div>
+                    <div className="bg-slate-50 p-1.5 rounded">
+                      <span className="text-slate-400 block text-[9px] uppercase font-bold">Reass.</span>
+                      <span className="font-extrabold text-slate-700 text-xs">{u.reassignedToCount || 0}</span>
+                    </div>
+                  </div>
 
-                      {/* Completed Late */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap font-semibold text-rose-700">
-                        {u.completedLate || u.completedLateJobs || 0}
-                      </td>
+                  {/* Oldest Active Job Footer */}
+                  {u.oldestActiveJob !== '—' && u.oldestActiveJob && (
+                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+                      <span>Oldest Job:</span>
+                      <span className="font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100 truncate max-w-[120px]">
+                        {u.oldestActiveJob}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-                      {/* Reassigned To */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap text-slate-600">
-                        {u.reassignedToCount || 0}
-                      </td>
+        {/* Pagination Controls (First, 1, 2, 3..., Last only - No Prev/Next) */}
+        {totalWorkloadPages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+            <span className="text-slate-500 text-xs">
+              Showing <strong className="text-slate-800">{(userWorkloadPage - 1) * USER_WORKLOAD_PAGE_SIZE + 1}</strong> to{' '}
+              <strong className="text-slate-800">{Math.min(userWorkloadPage * USER_WORKLOAD_PAGE_SIZE, filteredUserWorkload.length)}</strong> of{' '}
+              <strong className="text-slate-800">{filteredUserWorkload.length}</strong> employees • Page <strong className="text-slate-800">{userWorkloadPage}</strong> of <strong className="text-slate-800">{totalWorkloadPages}</strong>
+            </span>
 
-                      {/* Oldest Active Job */}
-                      <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
-                        {u.oldestActiveJob !== '—' && u.oldestActiveJob ? (
-                          <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 text-[11px]">
-                            {u.oldestActiveJob}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+            <div className="flex items-center gap-1.5">
+              {/* First Button */}
+              <button
+                type="button"
+                onClick={() => setUserWorkloadPage(1)}
+                disabled={userWorkloadPage === 1}
+                className={`h-7 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  userWorkloadPage === 1
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-700 shadow-2xs'
+                }`}
+              >
+                First
+              </button>
+
+              {/* Numbered 1, 2, 3... Page Buttons */}
+              {Array.from({ length: totalWorkloadPages }, (_, idx) => idx + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setUserWorkloadPage(pageNum)}
+                  className={`h-7 min-w-[28px] px-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    userWorkloadPage === pageNum
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-700 shadow-2xs'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              {/* Last Button */}
+              <button
+                type="button"
+                onClick={() => setUserWorkloadPage(totalWorkloadPages)}
+                disabled={userWorkloadPage === totalWorkloadPages}
+                className={`h-7 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  userWorkloadPage === totalWorkloadPages
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-700 shadow-2xs'
+                }`}
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 6. COMPLETE JOB ACCOUNTABILITY SLIDE-OUT DRAWER */}
@@ -2032,14 +2089,7 @@ export default function AdminOversightDashboard() {
         </div>
       )}
 
-      {/* Dynamic Formula Rules Configurator Modal */}
-      {showFormulaRulesModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
-            <DynamicFormulaRulesManager user={user} onClose={() => setShowFormulaRulesModal(false)} />
-          </div>
-        </div>
-      )}
+
 
     </div>
   );

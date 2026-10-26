@@ -1,10 +1,9 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
-  X
+  ChevronRight
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -16,26 +15,10 @@ export default function Sidebar({
   onToggleCollapse
 }) {
   const [isHovered, setIsHovered] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [hoveredItemKey, setHoveredItemKey] = useState(null);
-  const searchInputRef = useRef(null);
 
   // Expanded visually if not collapsed, or if currently being hovered in collapsed peek mode
   const isExpanded = !isCollapsed || isHovered;
-
-  // Filter navigation items if search query is typed
-  const displayedItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return navItems;
-
-    // Filter items matching label
-    const matched = navItems.filter(item => {
-      if (item.section) return false;
-      return (item.label || '').toLowerCase().includes(q);
-    });
-
-    return matched;
-  }, [navItems, searchQuery]);
 
   return (
     <>
@@ -83,16 +66,23 @@ export default function Sidebar({
               </div>
             </div>
           ) : (
-            <div className="w-full flex justify-center py-1">
+            <div className="w-full flex flex-col items-center justify-center gap-1.5 py-0.5">
               <img
                 src="/21.png"
                 alt="Logo"
-                className="h-11 w-11 object-contain drop-shadow-xs transition-transform duration-200 hover:scale-105"
+                className="h-9 w-9 object-contain drop-shadow-xs transition-transform duration-200 hover:scale-105"
               />
+              <button
+                onClick={onToggleCollapse}
+                title="Expand Sidebar"
+                className="h-5 w-5 rounded-[4px] bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-blue-700 flex items-center justify-center transition-colors cursor-pointer border border-slate-200 shadow-2xs"
+              >
+                <ChevronRight size={13} strokeWidth={2.2} />
+              </button>
             </div>
           )}
 
-          {/* Collapse/Expand Toggle Button */}
+          {/* Collapse Toggle Button (When Expanded) */}
           {isExpanded && (
             <button
               onClick={onToggleCollapse}
@@ -104,52 +94,9 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* In-Sidebar Search without '/' indicator */}
-        {isExpanded ? (
-          <div className="px-3 pt-3 pb-1">
-            <div className="relative flex items-center">
-              <Search
-                size={14}
-                strokeWidth={1.8}
-                className="absolute left-2.5 text-slate-400 pointer-events-none"
-              />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-[36px] pl-8 pr-7 text-[12px] bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-[#E2E8F0] rounded-[8px] focus:outline-none focus:ring-1 focus:ring-[#0000AA] focus:border-[#0000AA] text-slate-800 placeholder-slate-400 transition-all font-medium"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="px-2 pt-2 pb-1 flex justify-center">
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              title="Search"
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <Search size={16} strokeWidth={1.8} />
-            </button>
-          </div>
-        )}
-
-
-
         {/* Navigation Items List */}
-        <nav className="flex-1 px-2 py-1.5 space-y-0.5 overflow-y-auto overflow-x-hidden">
-          {displayedItems
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
+          {navItems
             .filter((item) => item.show !== false)
             .map((item, idx) => {
               if (item.section) {
@@ -228,27 +175,7 @@ export default function Sidebar({
                 </div>
               );
             })}
-
-          {/* Empty search state */}
-          {displayedItems.length === 0 && (
-            <div className="py-6 text-center text-xs text-slate-400">
-              No matching items
-            </div>
-          )}
         </nav>
-
-        {/* Bottom Rail: Expand Toggle Button in Collapsed Mode */}
-        {!isExpanded && (
-          <div className="p-2 border-t border-[#E2E8F0] flex justify-center bg-white">
-            <button
-              onClick={onToggleCollapse}
-              title="Expand Sidebar"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <PanelLeftOpen size={16} strokeWidth={1.8} />
-            </button>
-          </div>
-        )}
       </aside>
     </>
   );

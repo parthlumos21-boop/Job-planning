@@ -691,7 +691,11 @@ async def create_job(
             + [str(d).lower().strip() for d in (body.get("visibleToDepartments") or []) if d and str(d).strip()]
         )),
         selected=False,
-        fields=body.get("fields") or body.get("allDepartmentsData") or {},
+        fields={
+            **(body.get("fields") or body.get("allDepartmentsData") or {}),
+            "complexity": body.get("complexity") or (body.get("fields") or {}).get("complexity") or "medium",
+            "priority": body.get("priority") or (body.get("fields") or {}).get("priority") or "normal"
+        },
         engineers=body.get("engineers", {}),
         department_status=body.get("departmentStatus", {
             "marketing": "completed",

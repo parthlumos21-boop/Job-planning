@@ -444,6 +444,11 @@ class JobDepartmentSchedule(Base):
     approved_extension_days = Column(Integer, default=0) # approved - original
     accountable_delay_days = Column(Integer, default=0) # actual - approved
     status = Column(String(50), default="Pending", index=True) # 'Pending', 'In Progress', 'Completed', 'Overdue'
+    current_target_date = Column(Date, nullable=True)
+    formula_snapshot = Column(JSONB, nullable=True)
+    formula_inputs = Column(JSONB, nullable=True)
+    total_delay_days = Column(Integer, default=0)
+    completion_status = Column(String(50), default="Pending")
     notes = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -468,6 +473,90 @@ class DepartmentExtensionRequest(Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     review_remarks = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class JobFieldDefinition(Base):
+    __tablename__ = "job_field_definitions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    field_key = Column(String(64), unique=True, nullable=False, index=True)
+    field_label = Column(String(128), nullable=False)
+    field_type = Column(String(32), default="select")
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class JobFieldOption(Base):
+    __tablename__ = "job_field_options"
+
+    id = Column(Integer, primary_key=True, index=True)
+    field_key = Column(String(64), nullable=False, index=True)
+    value = Column(String(128), nullable=False)
+    label = Column(String(128), nullable=False)
+    sequence = Column(Integer, default=0)
+    active = Column(Boolean, default=True)
+
+class DepartmentPlanningRuleCondition(Base):
+    __tablename__ = "department_planning_rule_conditions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rule_id = Column(Integer, ForeignKey("department_formula_rules.id", ondelete="CASCADE"), nullable=False, index=True)
+    field_key = Column(String(64), nullable=False)
+    operator = Column(String(32), default="equals")
+    value = Column(String(128), nullable=False)
+    additional_days = Column(Integer, default=0)
+    condition_label = Column(String(255), default="")
+    sequence = Column(Integer, default=0)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class DelayReason(Base):
+    __tablename__ = "delay_reasons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(64), unique=True, nullable=False, index=True)
+    label = Column(String(255), nullable=False)
+    delay_type = Column(String(32), default="INTERNAL") # 'INTERNAL', 'EXTERNAL'
+    department = Column(String(50), default="ALL")
+    description = Column(String(255), default="")
+    active = Column(Boolean, default=True)
+
+class JobDepartmentDelayEvent(Base):
+    __tablename__ = "job_department_delay_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    schedule_id = Column(Integer, ForeignKey("job_department_schedules.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    department = Column(String(50), nullable=False, index=True)
+    delay_reason_id = Column(Integer, ForeignKey("delay_reasons.id", ondelete="SET NULL"), nullable=True)
+    delay_reason_code = Column(String(64), default="")
+    delay_reason_label = Column(String(255), default="")
+    delay_type = Column(String(32), default="INTERNAL")
+    delay_days = Column(Integer, default=1, nullable=False)
+    delay_start_date = Column(Date, nullable=True)
+    delay_end_date = Column(Date, nullable=True)
+    remarks = Column(Text, default="")
+    reported_by = Column(String(255), default="")
+    responsible_person = Column(String(255), default="")
+    reported_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String(50), default="Approved")
+
+class JobDepartmentScheduleRevision(Base):
+    __tablename__ = "job_department_schedule_revisions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    schedule_id = Column(Integer, ForeignKey("job_department_schedules.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    department = Column(String(50), nullable=False, index=True)
+    old_target_date = Column(Date, nullable=False)
+    new_target_date = Column(Date, nullable=False)
+    days_extended = Column(Integer, default=1)
+    reason_category = Column(String(100), default="")
+    reason_text = Column(Text, default="")
+    requested_by = Column(String(255), default="")
+    approved_by = Column(String(255), default="")
+    requested_at = Column(DateTime(timezone=True), server_default=func.now())
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(50), default="Approved")
+
 
 
 

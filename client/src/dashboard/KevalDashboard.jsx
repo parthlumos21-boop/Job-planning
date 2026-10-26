@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import LiveTimelineChart from '../components/LiveTimelineChart';
 import JobHistoryDrawer from '../components/JobHistoryDrawer';
 import JobProgressModal from '../components/JobProgressModal';
+import DepartmentTimelineViewer from '../components/timeline/DepartmentTimelineViewer';
 import { ALL_DEPARTMENT_USER_OPTIONS } from '../jobs/departmentUserOptions';
 import {
   Play, Pause, CheckCircle2, Clock, AlertTriangle, TrendingUp,
@@ -53,6 +54,17 @@ const HANDOVER_REASONS = [
   'Other'
 ];
 
+const BOTTOM_TABS = [
+  { key: 'all', label: 'All Jobs' },
+  { key: 'marketing', label: 'Marketing' },
+  { key: 'design', label: 'Electrical Design' },
+  { key: 'mechanical', label: 'Mechanical Design' },
+  { key: 'purchase', label: 'Procurement' },
+  { key: 'production', label: 'Production' },
+  { key: 'qc', label: 'Quality Control (QC)' },
+  { key: 'dispatch', label: 'Dispatch' }
+];
+
 function formatTime(totalSeconds) {
   if (totalSeconds === null || totalSeconds === undefined || totalSeconds < 0) return '00:00:00';
   const hrs = Math.floor(totalSeconds / 3600);
@@ -77,6 +89,10 @@ export default function KevalDashboard() {
   const [actionLoading, setActionLoading] = useState(null);
   const [sseConnected, setSseConnected] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterDept, setFilterDept] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [activeBottomTab, setActiveBottomTab] = useState('all');
   const [activeKpiFilter, setActiveKpiFilter] = useState('all');
 
   // Selected Job for Live Timeline Chart
@@ -91,6 +107,10 @@ export default function KevalDashboard() {
   const [historyJobId, setHistoryJobId] = useState(null);
   const [progressModalOpen, setProgressModalOpen] = useState(false);
   const [progressModalJob, setProgressModalJob] = useState(null);
+
+  // Day-Wise Formula Timeline Drawer State
+  const [timelineDrawerOpen, setTimelineDrawerOpen] = useState(false);
+  const [timelineDrawerJob, setTimelineDrawerJob] = useState(null);
 
   // Pause Modal State
   const [pauseModalOpen, setPauseModalOpen] = useState(false);
@@ -459,7 +479,32 @@ export default function KevalDashboard() {
         }
       }
 
-      // 2. Clickable 12 KPI Card Filter
+      // 2. Department Filter (from bottom tabs or structured filter panel)
+      const targetDept = activeBottomTab !== 'all' ? activeBottomTab : filterDept;
+      if (targetDept !== 'all') {
+        const jStage = String(j.currentStage || '').toLowerCase();
+        const jDept = String(j.department || '').toLowerCase();
+        const jDeptKey = String(j.departmentKey || '').toLowerCase();
+        const matched = jStage.includes(targetDept) || jDept.includes(targetDept) || jDeptKey.includes(targetDept);
+        if (!matched) return false;
+      }
+
+      // 3. Status Filter (from structured filter panel)
+      if (filterStatus !== 'all') {
+        const jStatus = (j.status || 'Draft').toLowerCase();
+        if (filterStatus === 'running' && !(jStatus === 'running' || jStatus === 'in progress')) return false;
+        if (filterStatus === 'paused' && jStatus !== 'paused') return false;
+        if (filterStatus === 'completed' && jStatus !== 'completed') return false;
+        if (filterStatus === 'draft' && !(jStatus === 'draft' || jStatus === 'scheduled')) return false;
+      }
+
+      // 4. Priority Filter (from structured filter panel)
+      if (filterPriority !== 'all') {
+        const jPriority = String(j.priority || 'Medium').toLowerCase();
+        if (jPriority !== filterPriority.toLowerCase()) return false;
+      }
+
+      // 5. Clickable 12 KPI Card Filter
       const status = (j.status || 'Draft').toLowerCase();
       const elapsed = getJobElapsedSeconds(j);
       const est = j.estimatedDurationSeconds || 28800;
@@ -488,7 +533,22 @@ export default function KevalDashboard() {
           return true;
       }
     });
-  }, [jobs, searchTerm, activeKpiFilter, currentTimeMs]);
+  }, [jobs, searchTerm, filterDept, filterStatus, filterPriority, activeBottomTab, activeKpiFilter, currentTimeMs]);
+
+  // Centered pagination state for Live Jobs table
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filteredJobs.length / pageSize));
+
+  // Reset page when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterDept, filterStatus, filterPriority, activeBottomTab, activeKpiFilter]);
+
+  const paginatedJobs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredJobs.slice(start, start + pageSize);
+  }, [filteredJobs, currentPage, pageSize]);
 
   // Selected Job Object
   const currentSelectedJob = useMemo(() => {
@@ -547,229 +607,6 @@ export default function KevalDashboard() {
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
             <span>Sync Live</span>
           </button>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* SECTION 1: TWELVE CLICKABLE REAL-TIME KPI CARDS                           */}
-      {/* ========================================================================= */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <Activity size={16} className="text-blue-600" />
-            <span>Operational Key Performance Indicators (Click card to filter table)</span>
-          </h2>
-          {activeKpiFilter !== 'all' && (
-            <button
-              onClick={() => setActiveKpiFilter('all')}
-              className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
-            >
-              <X size={14} /> Clear Filter ({activeKpiFilter})
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {/* 1. Total Jobs Tracked */}
-          <div
-            onClick={() => setActiveKpiFilter('all')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'all'
-                ? 'bg-blue-50/80 border-blue-500 shadow-md ring-2 ring-blue-500/20'
-                : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase">1. Total Tracked</span>
-              <span className="p-1.5 rounded-lg bg-slate-100 text-slate-700"><Layers size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{kpis?.totalJobs ?? jobs.length}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">All registered jobs</div>
-          </div>
-
-          {/* 2. Running Now */}
-          <div
-            onClick={() => setActiveKpiFilter('running')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'running'
-                ? 'bg-emerald-50 border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
-                : 'bg-white border-emerald-200/80 hover:border-emerald-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-emerald-700 uppercase">2. Running Now</span>
-              <span className="relative flex h-3 w-3 mt-1">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
-              </span>
-            </div>
-            <div className="text-2xl font-bold text-emerald-700 mt-2">{kpis?.runningJobs ?? 0}</div>
-            <div className="text-[11px] text-emerald-600 font-medium mt-0.5">Active on shop floor</div>
-          </div>
-
-          {/* 3. Waiting to Start */}
-          <div
-            onClick={() => setActiveKpiFilter('waiting')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'waiting'
-                ? 'bg-slate-100 border-slate-500 shadow-md ring-2 ring-slate-500/20'
-                : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase">3. Waiting Start</span>
-              <span className="p-1.5 rounded-lg bg-slate-100 text-slate-600"><Clock size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{kpis?.scheduledJobs ?? 0}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Draft & Scheduled</div>
-          </div>
-
-          {/* 4. Paused Jobs */}
-          <div
-            onClick={() => setActiveKpiFilter('paused')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'paused'
-                ? 'bg-amber-50 border-amber-500 shadow-md ring-2 ring-amber-500/20'
-                : 'bg-white border-amber-200/80 hover:border-amber-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-amber-700 uppercase">4. Paused</span>
-              <span className="p-1.5 rounded-lg bg-amber-100 text-amber-700"><Pause size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-amber-700 mt-2">{kpis?.pausedJobs ?? 0}</div>
-            <div className="text-[11px] text-amber-600 mt-0.5">Temporary hold</div>
-          </div>
-
-          {/* 5. Blocked Jobs */}
-          <div
-            onClick={() => setActiveKpiFilter('blocked')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'blocked'
-                ? 'bg-orange-50 border-orange-500 shadow-md ring-2 ring-orange-500/20'
-                : 'bg-white border-orange-200/80 hover:border-orange-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-orange-700 uppercase">5. Blocked</span>
-              <span className="p-1.5 rounded-lg bg-orange-100 text-orange-700"><AlertOctagon size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-orange-700 mt-2">{kpis?.blockedJobs ?? 0}</div>
-            <div className="text-[11px] text-orange-600 mt-0.5">Issue escalation</div>
-          </div>
-
-          {/* 6. Overdue Jobs */}
-          <div
-            onClick={() => setActiveKpiFilter('overdue')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'overdue'
-                ? 'bg-rose-50 border-rose-500 shadow-md ring-2 ring-rose-500/20'
-                : 'bg-white border-rose-200/80 hover:border-rose-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-rose-700 uppercase">6. Overdue</span>
-              <span className="p-1.5 rounded-lg bg-rose-100 text-rose-700"><AlertTriangle size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-rose-700 mt-2">{kpis?.overdueJobs ?? 0}</div>
-            <div className="text-[11px] text-rose-600 font-medium mt-0.5">Past schedule / limit</div>
-          </div>
-
-          {/* 7. Completed Today */}
-          <div
-            onClick={() => setActiveKpiFilter('completed_today')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'completed_today'
-                ? 'bg-emerald-50 border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
-                : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-emerald-800 uppercase">7. Completed</span>
-              <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700"><CheckCheck size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-emerald-800 mt-2">{kpis?.completedToday ?? kpis?.completedJobs ?? 0}</div>
-            <div className="text-[11px] text-emerald-600 mt-0.5">Finalized jobs</div>
-          </div>
-
-          {/* 8. Jobs at Risk */}
-          <div
-            onClick={() => setActiveKpiFilter('at_risk')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'at_risk'
-                ? 'bg-amber-50 border-amber-500 shadow-md ring-2 ring-amber-500/20'
-                : 'bg-white border-amber-200/80 hover:border-amber-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-amber-800 uppercase">8. Jobs at Risk</span>
-              <span className="p-1.5 rounded-lg bg-amber-100 text-amber-700"><Flame size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-amber-800 mt-2">{kpis?.jobsAtRisk ?? 0}</div>
-            <div className="text-[11px] text-amber-600 mt-0.5">&gt;85% effort used</div>
-          </div>
-
-          {/* 9. Total Planned Effort */}
-          <div
-            onClick={() => setActiveKpiFilter('all')}
-            className="p-4 rounded-xl border bg-white border-slate-200/80 hover:border-slate-300 shadow-sm cursor-pointer"
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase">9. Planned Effort</span>
-              <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700"><Calendar size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{kpis?.totalPlannedHours ?? 8.0}h</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Budgeted hours</div>
-          </div>
-
-          {/* 10. Active Working Time */}
-          <div
-            onClick={() => setActiveKpiFilter('all')}
-            className="p-4 rounded-xl border bg-white border-slate-200/80 hover:border-slate-300 shadow-sm cursor-pointer"
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase">10. Working Time</span>
-              <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700"><Clock size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-indigo-700 mt-2">{kpis?.activeWorkingHours ?? 4.2}h</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Cumulative floor time</div>
-          </div>
-
-          {/* 11. Time Variance */}
-          <div
-            onClick={() => setActiveKpiFilter('variance')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'variance'
-                ? 'bg-rose-50 border-rose-500 shadow-md ring-2 ring-rose-500/20'
-                : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase">11. Variance</span>
-              <span className="p-1.5 rounded-lg bg-purple-100 text-purple-700"><TrendingUp size={16} /></span>
-            </div>
-            <div className={`text-2xl font-bold mt-2 ${(kpis?.avgVarianceHours || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-              {(kpis?.avgVarianceHours || 0) > 0 ? `+${kpis?.avgVarianceHours}h` : `${kpis?.avgVarianceHours || 0.0}h`}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Avg deviation</div>
-          </div>
-
-          {/* 12. Active Workers */}
-          <div
-            onClick={() => setActiveKpiFilter('active_workers')}
-            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-              activeKpiFilter === 'active_workers'
-                ? 'bg-blue-50 border-blue-500 shadow-md ring-2 ring-blue-500/20'
-                : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-sm'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase">12. Active Workers</span>
-              <span className="p-1.5 rounded-lg bg-teal-100 text-teal-700"><Users size={16} /></span>
-            </div>
-            <div className="text-2xl font-bold text-teal-700 mt-2">{kpis?.activeWorkersCount ?? 1}</div>
-            <div className="text-[11px] text-teal-600 font-medium mt-0.5">Logged-in engineers</div>
-          </div>
         </div>
       </div>
 
@@ -836,19 +673,124 @@ export default function KevalDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Quick KPI filter badge if active */}
-            {activeKpiFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 shadow-2xs">
-                <span>Filter: {activeKpiFilter}</span>
-                <button onClick={() => setActiveKpiFilter('all')} className="hover:text-blue-900 cursor-pointer" title="Reset filter">
-                  <X size={12} />
-                </button>
-              </span>
-            )}
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
               <span>Real-Time Sync</span>
             </div>
+          </div>
+        </div>
+
+        {/* Search & Filter Bar (Inside Table Container - Exact UI Match) */}
+        <div className="px-6 py-3 bg-slate-50/70 border-b border-slate-200/80 flex flex-wrap items-end gap-3 text-xs">
+          {/* Search Job */}
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Search Job</label>
+            <input
+              type="text"
+              placeholder="Search Job No, Panel or Customer..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full h-[34px] px-3 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500/20 shadow-2xs font-medium"
+            />
+          </div>
+
+          {/* Department */}
+          <div className="w-[180px]">
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Department</label>
+            <select
+              value={filterDept}
+              onChange={(e) => {
+                setFilterDept(e.target.value);
+                setActiveBottomTab('all');
+              }}
+              className="w-full h-[34px] px-2.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500/20 shadow-2xs font-medium cursor-pointer"
+            >
+              <option value="all">All Departments</option>
+              <option value="marketing">Marketing</option>
+              <option value="design">Electrical Design</option>
+              <option value="mechanical">Mechanical Design</option>
+              <option value="purchase">Procurement</option>
+              <option value="production">Production</option>
+              <option value="qc">Quality Control (QC)</option>
+              <option value="dispatch">Dispatch</option>
+            </select>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setFilterDept('all');
+                setFilterStatus('all');
+                setFilterPriority('all');
+                setActiveBottomTab('all');
+                setActiveKpiFilter('all');
+              }}
+              className="h-[34px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-300 rounded-lg cursor-pointer shadow-2xs transition-colors"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(1)}
+              className="h-[34px] px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer shadow-2xs transition-colors"
+            >
+              Filter
+            </button>
+          </div>
+
+          {(searchTerm || filterDept !== 'all' || activeBottomTab !== 'all' || activeKpiFilter !== 'all') && (
+            <div className="w-full flex items-center justify-between pt-1">
+              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                Filters Active ({filteredJobs.length} {filteredJobs.length === 1 ? 'Job' : 'Jobs'})
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Department Tabs Navigation (Top Side - Between Search Filter & Table Contents) */}
+        <div className="border-b border-slate-200/80 bg-white px-6 py-2.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {BOTTOM_TABS.map((tab) => {
+              const isActive = activeBottomTab === tab.key;
+              const count = tab.key === 'all'
+                ? jobs.length
+                : jobs.filter(j => {
+                    const jStage = String(j.currentStage || '').toLowerCase();
+                    const jDept = String(j.department || '').toLowerCase();
+                    const jDeptKey = String(j.departmentKey || '').toLowerCase();
+                    return jStage.includes(tab.key) || jDept.includes(tab.key) || jDeptKey.includes(tab.key);
+                  }).length;
+
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => {
+                    setActiveBottomTab(tab.key);
+                    if (tab.key !== 'all') {
+                      setFilterDept('all');
+                    }
+                  }}
+                  className={`h-8 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-blue-600 text-white font-bold shadow-2xs border border-blue-600'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -869,25 +811,17 @@ export default function KevalDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-normal bg-white">
-              {filteredJobs.length === 0 ? (
+              {paginatedJobs.length === 0 ? (
                 <tr>
                   <td colSpan="9" className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Clock size={24} className="text-slate-300" />
                       <p className="font-medium text-slate-500">No jobs currently matching your active filter.</p>
-                      {activeKpiFilter !== 'all' && (
-                        <button
-                          onClick={() => setActiveKpiFilter('all')}
-                          className="mt-1 text-xs text-blue-600 hover:text-blue-700 font-semibold underline cursor-pointer"
-                        >
-                          Clear KPI filter
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredJobs.map((j) => {
+                paginatedJobs.map((j) => {
                   const elapsedSeconds = getJobElapsedSeconds(j);
                   const isRunning = j.status === 'Running' || j.status === 'In Progress';
                   const isPaused = j.status === 'Paused';
@@ -1046,6 +980,16 @@ export default function KevalDashboard() {
                           </button>
                           <button
                             onClick={() => {
+                              setTimelineDrawerJob(j);
+                              setTimelineDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 shadow-2xs transition-all cursor-pointer"
+                            title="View Day-Wise Formula Milestones & Delay Tracking"
+                          >
+                            <Calendar size={13} />
+                          </button>
+                          <button
+                            onClick={() => {
                               setHistoryJobId(j.id);
                               setHistoryDrawerOpen(true);
                             }}
@@ -1125,6 +1069,49 @@ export default function KevalDashboard() {
             </tbody>
           </table>
         </div>
+
+        {/* Centered Table Pagination with Clickable Page Numbers (First, 1, 2, 3..., Next) */}
+        {filteredJobs.length > 0 && (
+          <div className="py-3 px-6 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+            {/* First Page Button */}
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="h-8 px-2.5 sm:px-3 rounded-[3px] bg-white border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              title="Navigate to First Page"
+            >
+              First
+            </button>
+
+            {/* Clickable Page Numbers (1, 2, 3...) */}
+            <div className="flex items-center gap-1 mx-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`h-8 w-8 rounded-[3px] text-xs font-bold transition-all cursor-pointer border flex items-center justify-center ${
+                    currentPage === pageNum
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-300 shadow-2xs'
+                  }`}
+                  title={`Page ${pageNum}`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+            </div>
+
+            {/* Next Page Button */}
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="h-8 px-2.5 rounded-[3px] bg-white border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              title="Next Page"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -1471,6 +1458,51 @@ export default function KevalDashboard() {
           addToast('success', 'Progress Saved', `Progress saved for ${progressModalJob?.jobNo || '#' + progressModalJob?.id}`, progressModalJob?.id);
         }}
       />
+
+      {/* Slide-Out Day-Wise Formula Timeline Drawer */}
+      {timelineDrawerOpen && timelineDrawerJob && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-2xs transition-opacity"
+            onClick={() => setTimelineDrawerOpen(false)}
+          />
+          {/* Drawer Panel - Sized so close button and headers are unclipped */}
+          <div className="relative z-10 w-full max-w-3xl sm:max-w-3xl md:max-w-4xl bg-[#f5f6f8] h-full shadow-2xl flex flex-col overflow-hidden border-l border-slate-300 animate-in slide-in-from-right duration-200 rounded-l-xl">
+            {/* Drawer Header Bar */}
+            <div className="px-5 py-3 border-b border-slate-300 flex items-center justify-between bg-slate-100 sticky top-0 z-20 shrink-0">
+              <div className="flex items-center gap-2 pr-2 truncate">
+                <span className="p-1 rounded-[3px] bg-blue-100 text-blue-700 shrink-0">
+                  <Calendar size={15} />
+                </span>
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider truncate">
+                  Timeline &amp; Delay Accountability — Job #{timelineDrawerJob.jobNo} ({timelineDrawerJob.panelName || 'Industrial Panel'})
+                </span>
+              </div>
+              <button
+                onClick={() => setTimelineDrawerOpen(false)}
+                className="h-7 px-2.5 flex items-center gap-1 text-slate-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-300 rounded-[3px] text-xs font-bold transition-colors cursor-pointer shadow-2xs shrink-0"
+                title="Close Drawer"
+              >
+                <X size={14} />
+                <span>Close</span>
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto p-4 bg-[#f5f6f8]">
+              <div className="bg-white border border-slate-300 rounded-[6px] p-4 shadow-2xs">
+                <DepartmentTimelineViewer
+                  jobId={timelineDrawerJob.id}
+                  user={user}
+                  onTimelineUpdated={() => fetchAllData(true)}
+                  onClose={() => setTimelineDrawerOpen(false)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

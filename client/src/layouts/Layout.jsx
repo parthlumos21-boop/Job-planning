@@ -103,7 +103,7 @@ export default function Layout() {
     navItems.push({ to: '/admin/users', label: 'User Management', icon: <Users size={18} strokeWidth={1.8} /> });
     navItems.push({ to: '/jobs/handover', label: 'Planning Control Center', icon: <ArrowRightLeft size={18} strokeWidth={1.8} />, badge: pendingHandoverCount });
     navItems.push({ 
-      to: '/admin/late-jobs', 
+      to: '/admin-oversight', 
       label: 'Job Late for Users', 
       icon: <ShieldCheck size={18} strokeWidth={1.8} />
     });
@@ -117,6 +117,7 @@ export default function Layout() {
   const isActive = (path) => {
     if (path === '/dashboard') return location.pathname === '/dashboard' || location.pathname === '/';
     if (path === '/admin/dashboard') return location.pathname === '/admin/dashboard' || location.pathname === '/';
+    if (path === '/admin-oversight') return location.pathname === '/admin-oversight' || location.pathname === '/admin/late-jobs' || location.pathname === '/admin/oversight';
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path.split('?')[0]);
   };

@@ -18,6 +18,7 @@ import SearchJobsPage from './jobs/SearchJobsPage';
 import DepartmentMyTasksPage from './jobs/DepartmentMyTasksPage';
 import IncomingJobsPage from './jobs/IncomingJobsPage';
 import UserManagementPage from './users/UserManagementPage';
+import FormulaRulesPage from './pages/FormulaRulesPage';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -63,6 +64,9 @@ function App() {
             <Route path="admin/dashboard" element={<AdminOnlyRoute><Dashboard /></AdminOnlyRoute>} />
             <Route path="admin/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
             <Route path="admin/late-jobs" element={<AdminOnlyRoute><AdminOversightDashboard /></AdminOnlyRoute>} />
+            <Route path="admin-oversight" element={<AdminOnlyRoute><AdminOversightDashboard /></AdminOnlyRoute>} />
+            <Route path="admin-oversight/formula-rules" element={<AdminOnlyRoute><FormulaRulesPage /></AdminOnlyRoute>} />
+            <Route path="admin/oversight" element={<AdminOnlyRoute><AdminOversightDashboard /></AdminOnlyRoute>} />
             <Route path="incoming-jobs" element={<IncomingJobsPage />} />
             <Route path="search-jobs" element={<SearchJobsPage />} />
             <Route path="my-tasks" element={<DepartmentMyTasksPage />} />

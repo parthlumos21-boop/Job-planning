@@ -12,6 +12,7 @@ import SimpleHandoverModal from '../jobs/SimpleHandoverModal';
 import ReHandoverModal from '../jobs/modals/ReHandoverModal';
 import ReassignEngineerModal from '../jobs/modals/ReassignEngineerModal';
 import SearchJobsSection from '../components/SearchJobsSection';
+import StatsCard from '../components/StatsCard';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -49,6 +50,7 @@ export default function MarketingJobDashboard() {
   const [reassignModalJob, setReassignModalJob] = useState(null);
   const [reHandoverModalJob, setReHandoverModalJob] = useState(null);
   const [showActivityFeed, setShowActivityFeed] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   const isLead = isMarketingLead(user);
   // Exclusively allow Keval V Shah to access & download the Marketing report
@@ -68,6 +70,7 @@ export default function MarketingJobDashboard() {
       if (res.data?.recentActivity) {
         setRecentActivity(res.data.recentActivity);
       }
+      setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to load marketing dashboard:', err);
     } finally {
@@ -255,76 +258,96 @@ export default function MarketingJobDashboard() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-            Welcome, {user?.name || user?.username || 'Marketing User'}
-          </h1>
-          <button
-            onClick={fetchDashboardData}
-            disabled={refreshing}
-            className={`p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all cursor-pointer ${
-              refreshing ? 'animate-spin' : ''
-            }`}
-            title="Refresh Live Data"
-          >
-            <RefreshCw size={18} />
-          </button>
+      {/* Top Action Bar (Above KPI Cards, Right-Aligned, Responsive - matches /admin/dashboard) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3.5">
+        {/* Left Side: Clean Marketing Status Indicator */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-50/80 border border-blue-100/90 text-[#0000AA] flex items-center justify-center shrink-0 shadow-2xs">
+            <Briefcase size={16} strokeWidth={2.2} />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <span>Marketing Register &amp; Dispatch Tracking</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                Live Operations
+              </span>
+            </h1>
+            <p className="text-[11px] text-slate-500 font-medium">
+              Welcome, <strong className="text-slate-700">{user?.name || user?.username || 'Marketing User'}</strong> &bull; Commercial readiness, design release &amp; delivery milestones
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-
-          {/* Activity Feed Trigger */}
+        {/* Right Side Pill Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Activity Feed Pill */}
           {isLead && recentActivity.length > 0 && (
             <button
               onClick={() => setShowActivityFeed(!showActivityFeed)}
-              className="inline-flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3.5 py-2.5 rounded-xl border border-indigo-200 transition-all text-xs cursor-pointer"
+              className="h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer shrink-0"
             >
-              <Sparkles size={15} />
-              Team Activity ({recentActivity.length})
+              <Sparkles size={13} strokeWidth={2} className="text-amber-500" />
+              <span>Team Activity ({recentActivity.length})</span>
             </button>
           )}
 
-          {/* Download Marketing Report (EXCLUSIVELY FOR KEVAL V SHAH) */}
+          {/* Keval Exclusive Download Report */}
           {isKeval && (
             <button
               onClick={handleDownloadReport}
               disabled={downloadingReport}
-              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2.5 rounded-xl shadow-xs hover:shadow transition-all text-xs disabled:opacity-50 cursor-pointer"
+              className="h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 shadow-2xs hover:bg-emerald-100 transition-all cursor-pointer shrink-0 disabled:opacity-50"
               title="Download Full Marketing Register Excel Report"
             >
               {downloadingReport ? (
-                <RefreshCw size={15} className="animate-spin" />
+                <RefreshCw size={13} className="animate-spin text-emerald-600" />
               ) : (
-                <FileSpreadsheet size={15} />
+                <FileSpreadsheet size={13} strokeWidth={2} className="text-emerald-700" />
               )}
-              Download Marketing Report
+              <span>Export Excel</span>
             </button>
           )}
 
-          {/* Create Job */}
+          {/* Pill Button: Refresh Data */}
+          <button
+            onClick={fetchDashboardData}
+            disabled={refreshing}
+            className={`h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer shrink-0 ${
+              refreshing ? 'opacity-70' : ''
+            }`}
+            title="Refresh Data"
+          >
+            <RefreshCw
+              size={13}
+              strokeWidth={2}
+              className={`text-slate-500 ${refreshing ? 'animate-spin text-[#0000AA]' : ''}`}
+            />
+            <span className="whitespace-nowrap">Refresh Data</span>
+          </button>
+
+          {/* Pill Button: Create Job */}
           <button
             onClick={() => navigate('/jobs/new')}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-xs hover:shadow transition-all text-xs cursor-pointer"
+            className="h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-bold text-white bg-[#0000AA] hover:bg-blue-900 shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
+            title="Create Job"
           >
-            <PlusCircle size={16} />
-            Create New Job
+            <PlusCircle size={15} strokeWidth={2.2} />
+            <span className="whitespace-nowrap">Create Job</span>
           </button>
         </div>
       </div>
 
       {/* Recent Activity Drawer (For Lead / mktadmin) */}
       {isLead && showActivityFeed && recentActivity.length > 0 && (
-        <div className="bg-white rounded-2xl border border-indigo-100 p-4 shadow-sm space-y-3 animate-in fade-in">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3 animate-in fade-in">
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <h3 className="text-xs font-black uppercase tracking-wider text-indigo-900 flex items-center gap-2">
-              <Sparkles size={14} className="text-indigo-600" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <Sparkles size={14} className="text-blue-600" />
               Live Marketing Team Activity Feed
             </h3>
             <button
               onClick={() => setShowActivityFeed(false)}
-              className="text-slate-400 hover:text-slate-600 p-1"
+              className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
             >
               <X size={15} />
             </button>
@@ -338,7 +361,7 @@ export default function MarketingJobDashboard() {
                     {act.createdAt ? new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                   </span>
                 </div>
-                <p className="text-indigo-700 font-semibold">{act.action.replace(/_/g, ' ')}</p>
+                <p className="text-blue-700 font-semibold">{act.action.replace(/_/g, ' ')}</p>
                 <p className="text-slate-500 text-[11px]">By: <span className="font-medium text-slate-800">{act.updatedBy || 'Marketing'}</span></p>
               </div>
             ))}
@@ -346,78 +369,70 @@ export default function MarketingJobDashboard() {
         </div>
       )}
 
-      {/* 4 Live KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 4 LIVE KPI CARDS using standard StatsCard */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Card 1: Active Jobs */}
         <div
           onClick={() => setActiveFilter(activeFilter === 'in_progress' ? 'all' : 'in_progress')}
-          className={`cursor-pointer bg-white rounded-2xl p-5 border transition-all ${
-            activeFilter === 'in_progress'
-              ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-md'
-              : 'border-slate-200 hover:border-slate-300 shadow-xs'
+          className={`cursor-pointer rounded-2xl transition-all ${
+            activeFilter === 'in_progress' ? 'ring-2 ring-[#0000AA] shadow-xs' : ''
           }`}
+          title="Click to filter Active Jobs"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Jobs</span>
-            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-              <Briefcase size={20} />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">{stats.activeJobs}</p>
-          <p className="text-xs text-slate-400 mt-1 font-medium">Currently in marketing progress</p>
+          <StatsCard
+            title="Active Jobs"
+            value={stats.activeJobs}
+            icon={<Briefcase size={18} strokeWidth={2} />}
+            subtitle="Currently in progress"
+          />
         </div>
 
         {/* Card 2: Due Soon */}
         <div
           onClick={() => setActiveFilter(activeFilter === 'overdue' ? 'all' : 'overdue')}
-          className="cursor-pointer bg-white rounded-2xl p-5 border border-slate-200 hover:border-slate-300 shadow-xs transition-all"
+          className={`cursor-pointer rounded-2xl transition-all ${
+            activeFilter === 'overdue' ? 'ring-2 ring-amber-500 shadow-xs' : ''
+          }`}
+          title="Click to filter Due Soon"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Due Soon</span>
-            <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
-              <Clock size={20} />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">{stats.dueSoon}</p>
-          <p className="text-xs text-amber-600 mt-1 font-semibold">Delivery within 3 days</p>
+          <StatsCard
+            title="Due Soon"
+            value={stats.dueSoon}
+            icon={<Clock size={18} strokeWidth={2} />}
+            subtitle="Delivery within 3 days"
+          />
         </div>
 
         {/* Card 3: Overdue */}
         <div
           onClick={() => setActiveFilter(activeFilter === 'overdue' ? 'all' : 'overdue')}
-          className={`cursor-pointer bg-white rounded-2xl p-5 border transition-all ${
-            activeFilter === 'overdue'
-              ? 'border-rose-500 ring-2 ring-rose-500/20 shadow-md'
-              : 'border-slate-200 hover:border-slate-300 shadow-xs'
+          className={`cursor-pointer rounded-2xl transition-all ${
+            activeFilter === 'overdue' ? 'ring-2 ring-rose-500 shadow-xs' : ''
           }`}
+          title="Click to filter Overdue"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Overdue</span>
-            <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600">
-              <AlertTriangle size={20} />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-rose-600 mt-2">{stats.overdue}</p>
-          <p className="text-xs text-rose-600 mt-1 font-semibold">Past expected target date</p>
+          <StatsCard
+            title="Overdue"
+            value={stats.overdue}
+            icon={<AlertTriangle size={18} strokeWidth={2} />}
+            subtitle="Past expected target date"
+          />
         </div>
 
         {/* Card 4: Design Handover Pending */}
         <div
           onClick={() => setActiveFilter(activeFilter === 'awaiting_acceptance' ? 'all' : 'awaiting_acceptance')}
-          className={`cursor-pointer bg-white rounded-2xl p-5 border transition-all ${
-            activeFilter === 'awaiting_acceptance'
-              ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-md'
-              : 'border-slate-200 hover:border-slate-300 shadow-xs'
+          className={`cursor-pointer rounded-2xl transition-all ${
+            activeFilter === 'awaiting_acceptance' ? 'ring-2 ring-blue-500 shadow-xs' : ''
           }`}
+          title="Click to filter Design Handover Pending"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Design Handover Pending</span>
-            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
-              <ArrowRightLeft size={20} />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-indigo-700 mt-2">{stats.designHandoverPending}</p>
-          <p className="text-xs text-indigo-600 mt-1 font-semibold">Awaiting transfer or acceptance</p>
+          <StatsCard
+            title="Design Handover Pending"
+            value={stats.designHandoverPending}
+            icon={<ArrowRightLeft size={18} strokeWidth={2} />}
+            subtitle="Awaiting design transfer"
+          />
         </div>
       </div>
 

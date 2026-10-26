@@ -258,7 +258,14 @@ export default function SearchJobsPage() {
       ) : (
         <div className="space-y-6">
           {DEPARTMENTS.filter(d => selectedDeptFilter === 'all' || selectedDeptFilter === d.key).map(dept => {
-            const deptJobs = jobsByDepartment[dept.key] || [];
+            const rawDeptJobs = jobsByDepartment[dept.key] || [];
+            // LIFO order (latest jobs first)
+            const deptJobs = [...rawDeptJobs].sort((a, b) => {
+              if (b.createdAt && a.createdAt) {
+                return new Date(b.createdAt) - new Date(a.createdAt);
+              }
+              return (Number(b.id) || 0) - (Number(a.id) || 0);
+            });
             const DeptIcon = dept.icon;
 
             return (
@@ -278,22 +285,28 @@ export default function SearchJobsPage() {
                         <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${dept.badgeBg}`}>
                           {deptJobs.length} Job{deptJobs.length !== 1 ? 's' : ''}
                         </span>
+                        {deptJobs.length > 6 && (
+                          <span className="text-[11px] font-medium text-slate-400">
+                            (Scroll for more)
+                          </span>
+                        )}
                       </h2>
                     </div>
                   </div>
                 </div>
 
-                {/* Section Content: Job Cards Grid */}
+                {/* Section Content: Job Cards Grid (2 rows visible initially in LIFO order, scrollable for more) */}
                 <div className="p-5">
                   {deptJobs.length === 0 ? (
                     <div className="py-8 text-center text-slate-400 text-xs font-medium">
                       No jobs currently active in {dept.name}.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {deptJobs.map((job) => {
-                        const cleanNo = cleanJobNo(job.jobNo);
-                        const expDate = job.stageDueDate || job.plannedEndAt || job.deliveryDate || '—';
+                    <div className="max-h-[425px] overflow-y-auto pr-1">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {deptJobs.map((job) => {
+                          const cleanNo = cleanJobNo(job.jobNo);
+                          const expDate = job.stageDueDate || job.plannedEndAt || job.deliveryDate || '—';
 
                         return (
                           <div
@@ -364,6 +377,7 @@ export default function SearchJobsPage() {
                         );
                       })}
                     </div>
+                  </div>
                   )}
                 </div>
               </div>
