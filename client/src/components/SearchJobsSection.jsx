@@ -111,7 +111,7 @@ export default function SearchJobsSection({
             <h2 className="text-lg font-black text-slate-900 tracking-tight">
               Global Job Search
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#0000AA]/5 text-[#0000AA] border border-[#0000AA]/20">
               {jobs.length} Total Jobs
             </span>
           </div>
@@ -123,12 +123,12 @@ export default function SearchJobsSection({
         {/* Search Input & Compact Department Filter */}
         <div className="flex flex-wrap items-center gap-2">
           {isAdmin ? (
-            <div className="inline-flex items-center gap-1.5 px-2.5 h-8 bg-blue-50/70 border border-blue-200/70 rounded-full text-[11.5px] font-medium text-blue-900 shrink-0">
-              <Filter size={12} className="text-blue-600 shrink-0" />
+            <div className="inline-flex items-center gap-1.5 px-2.5 h-8 bg-[#0000AA]/5 border border-[#0000AA]/20 rounded-full text-[11.5px] font-medium text-slate-800 shrink-0">
+              <Filter size={12} className="text-[#0000AA] shrink-0" />
               <select
                 value={selectedDept}
                 onChange={(e) => onDeptChange && onDeptChange(e.target.value)}
-                className="bg-transparent text-[11.5px] font-semibold text-blue-900 focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent text-[11.5px] font-semibold text-slate-800 focus:outline-none cursor-pointer pr-1"
               >
                 {DEPARTMENT_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value} className="bg-white text-slate-800">
@@ -139,7 +139,7 @@ export default function SearchJobsSection({
             </div>
           ) : (
             userDeptName && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 h-8 bg-blue-50 text-blue-700 rounded-full text-[11.5px] font-semibold border border-blue-100 shrink-0">
+              <div className="inline-flex items-center gap-1.5 px-2.5 h-8 bg-[#0000AA]/5 text-[#0000AA] rounded-full text-[11.5px] font-semibold border border-[#0000AA]/20 shrink-0">
                 <Building2 size={12} />
                 <span>{userDeptName}</span>
               </div>
@@ -181,7 +181,7 @@ export default function SearchJobsSection({
       {inputVal && (
         <div className="flex items-center justify-between pb-1">
           <span className="text-xs text-slate-500 font-medium">
-            Showing results matching: <strong className="text-blue-600 font-bold">"{inputVal}"</strong>
+            Showing results matching: <strong className="text-[#0000AA] font-bold">"{inputVal}"</strong>
           </span>
           <span className="text-xs text-slate-400">
             Found <strong>{jobs.length}</strong> matching records
@@ -193,12 +193,12 @@ export default function SearchJobsSection({
       <div className="border border-slate-200 rounded-xl overflow-hidden">
         {loading ? (
           <div className="py-20 text-center text-slate-400 text-sm">
-            <RefreshCw size={26} className="animate-spin mx-auto mb-2 text-blue-600" />
+            <RefreshCw size={26} className="animate-spin mx-auto mb-2 text-[#0000AA]" />
             Loading job records...
           </div>
         ) : jobs.length === 0 ? (
           <div className="py-16 px-4 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3">
+            <div className="w-12 h-12 rounded-2xl bg-[#0000AA]/5 text-[#0000AA] flex items-center justify-center mx-auto mb-3">
               <Search size={22} />
             </div>
             <p className="text-sm font-bold text-slate-800">
@@ -207,7 +207,7 @@ export default function SearchJobsSection({
             {inputVal && (
               <button
                 onClick={handleClear}
-                className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="mt-4 px-4 py-2 bg-[#0000AA]/5 text-[#0000AA] hover:bg-[#0000AA]/15 rounded-[7px] text-xs font-bold transition-all cursor-pointer"
               >
                 Clear Search
               </button>
@@ -264,7 +264,7 @@ export default function SearchJobsSection({
                       </td>
 
                       {/* 1. Job Number (Clean database number) */}
-                      <td className="py-3 px-3.5 whitespace-nowrap font-black text-blue-700 hover:text-blue-900 text-xs">
+                      <td className="py-3 px-3.5 whitespace-nowrap font-black text-[#0000AA] hover:text-[#000088] text-xs">
                         {cleanJobNo(job.jobNo)}
                       </td>
 
@@ -339,7 +339,7 @@ export default function SearchJobsSection({
                             e.stopPropagation();
                             navigate(`/jobs/${job.id}`);
                           }}
-                          className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all text-xs shadow-2xs hover:shadow-xs inline-flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1 rounded-[7px] bg-[#0000AA] hover:bg-[#000088] text-white font-bold transition-all text-xs shadow-2xs hover:shadow-xs inline-flex items-center gap-1 cursor-pointer"
                           title="View Full Job Detail"
                         >
                           <Eye size={12} />
@@ -392,9 +392,9 @@ export default function SearchJobsSection({
                       )}
                       <button
                         onClick={() => setCurrentPage(p)}
-                        className={`w-7 h-7 rounded-lg font-black transition-all cursor-pointer ${
+                        className={`w-7 h-7 rounded-[7px] font-black transition-all cursor-pointer ${
                           currentPage === p
-                            ? 'bg-blue-600 text-white shadow-xs'
+                            ? 'bg-[#0000AA] text-white shadow-xs'
                             : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                         }`}
                       >
@@ -408,7 +408,7 @@ export default function SearchJobsSection({
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold flex items-center gap-1 transition-all cursor-pointer"
+              className="px-2.5 py-1.5 rounded-[7px] border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold flex items-center gap-1 transition-all cursor-pointer"
             >
               Next
               <ChevronRight size={14} />

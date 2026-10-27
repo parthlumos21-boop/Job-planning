@@ -15,9 +15,9 @@ export default function JobTimelineSummaryGrid({ timeline, schedules = [] }) {
   const isOverdue = totalAccountableDelay > 0;
 
   return (
-    <div className="border border-slate-300 rounded-[3px] bg-white overflow-hidden shadow-2xs">
-      {/* Gray Section Title Bar */}
-      <div className="bg-slate-100 border-b border-slate-300 px-3.5 py-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      {/* Section Title Bar */}
+      <div className="px-5 py-3 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 border-b border-slate-200/80 text-xs font-bold text-slate-800 uppercase tracking-wider">
         Job Summary
       </div>
 

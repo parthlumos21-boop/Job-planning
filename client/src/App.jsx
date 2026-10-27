@@ -19,6 +19,7 @@ import DepartmentMyTasksPage from './jobs/DepartmentMyTasksPage';
 import IncomingJobsPage from './jobs/IncomingJobsPage';
 import UserManagementPage from './users/UserManagementPage';
 import FormulaRulesPage from './pages/FormulaRulesPage';
+import AdminJobsTrackPage from './pages/AdminJobsTrackPage';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -80,6 +81,7 @@ function App() {
             <Route path="chart" element={<AdminOnlyRoute><ChartPage /></AdminOnlyRoute>} />
             <Route path="live-activity" element={<KevalOnlyRoute><LiveActivityDashboard /></KevalOnlyRoute>} />
             <Route path="live-monitor" element={<AdminOnlyRoute><KevalDashboard /></AdminOnlyRoute>} />
+            <Route path="admin/jobs-track" element={<AdminOnlyRoute><AdminJobsTrackPage /></AdminOnlyRoute>} />
             <Route path="reports" element={<AdminOnlyRoute><Reports /></AdminOnlyRoute>} />
           </Route>
         </Routes>

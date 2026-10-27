@@ -1153,11 +1153,11 @@ export default function AdminOversightDashboard() {
         </div>
 
         {/* Table Content */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[460px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 hover:scrollbar-thumb-slate-400 scrollbar-track-slate-100">
           <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-extrabold tracking-wider whitespace-nowrap">
-                {columnVisibility.jobNo && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.jobNo}</th>}
+            <thead className="sticky top-0 z-20 bg-slate-100 shadow-2xs">
+              <tr className="border-b border-slate-200 text-slate-600 uppercase text-[10px] font-extrabold tracking-wider whitespace-nowrap bg-slate-100">
+                {columnVisibility.jobNo && <th className="py-2.5 px-3">{COLUMN_DISPLAY_LABELS.jobNo}</th>}
                 {columnVisibility.customer && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.customer}</th>}
                 {columnVisibility.project && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.project}</th>}
                 {columnVisibility.panel && <th className="py-3 px-3">{COLUMN_DISPLAY_LABELS.panel}</th>}

@@ -1,17 +1,20 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LiveTimelineChart from '../components/LiveTimelineChart';
 import JobHistoryDrawer from '../components/JobHistoryDrawer';
 import JobProgressModal from '../components/JobProgressModal';
 import DepartmentTimelineViewer from '../components/timeline/DepartmentTimelineViewer';
+import OperationalSummaryCard from '../components/timeline/OperationalSummaryCard';
+import LiveJobsTable from '../components/timeline/LiveJobsTable';
 import { ALL_DEPARTMENT_USER_OPTIONS } from '../jobs/departmentUserOptions';
 import {
   Play, Pause, CheckCircle2, Clock, AlertTriangle, TrendingUp,
   BarChart3, RefreshCw, Activity, X, Loader2, Search, Filter,
   ShieldCheck, ArrowUpRight, ArrowDownRight, Layers, Users,
   AlertOctagon, CheckCheck, Gauge, ArrowRightLeft, UserCheck,
-  Calendar, Flame, Eye, Sparkles, Bell, ExternalLink
+  Calendar, Flame, Eye, Sparkles, Bell, ExternalLink, Home
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -464,7 +467,7 @@ export default function KevalDashboard() {
 
   // Filtered jobs according to search & 12 KPI card filters
   const filteredJobs = useMemo(() => {
-    return jobs.filter((j) => {
+    const list = jobs.filter((j) => {
       // 1. Text Search Filter
       if (searchTerm) {
         const q = searchTerm.toLowerCase();
@@ -533,6 +536,9 @@ export default function KevalDashboard() {
           return true;
       }
     });
+
+    // LIFO Ordering: Last added / highest ID jobs first
+    return [...list].sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
   }, [jobs, searchTerm, filterDept, filterStatus, filterPriority, activeBottomTab, activeKpiFilter, currentTimeMs]);
 
   // Centered pagination state for Live Jobs table
@@ -567,552 +573,107 @@ export default function KevalDashboard() {
   return (
     <div className="space-y-8 pb-16 max-w-7xl mx-auto">
       {/* ========================================================================= */}
-      {/* 0. HEADER BANNER                                                          */}
+      {/* 0. BREADCRUMB & HEADER (EXACT IMAGE 1 MATCH)                             */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-slate-800">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="p-2.5 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              <ShieldCheck size={26} />
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight">
-                  Real-Time Operational Monitoring Command Center
-                </h1>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold tracking-wide">
-                  ADMIN ONLY
-                </span>
-              </div>
-              <p className="text-slate-400 text-sm mt-0.5">
-                Centralized execution hub, live continuous timeline tracking, worker handovers & visual analytics
-              </p>
-            </div>
-          </div>
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+          <Home size={14} className="text-blue-600" />
+          <Link to="/" className="text-blue-600 hover:underline">Home</Link>
+          <span className="text-slate-400">›</span>
+          <span className="text-slate-800 font-semibold">Active Jobs &amp; Planning</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-800/80 px-3.5 py-1.5 rounded-lg border border-slate-700 text-xs">
-            <span className={`h-2.5 w-2.5 rounded-full ${sseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            <span className="text-slate-300 font-medium">
-              {sseConnected ? 'Live SSE Stream' : 'Auto Polling'}
-            </span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+              Active Jobs &amp; Planning Control Center
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
+              Monitor active jobs, worker assignments, elapsed time and department handovers.
+            </p>
           </div>
 
-          <button
-            onClick={() => fetchAllData(true)}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-            <span>Sync Live</span>
-          </button>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              <span>Real-Time Sync: Connected</span>
+            </div>
+
+            <button
+              onClick={() => fetchAllData(true)}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-blue-600 rounded-[7px] text-xs font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Refresh all data"
+            >
+              <RefreshCw size={13} className={`text-blue-600 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 2: DYNAMIC LIVE OPERATIONAL TIMELINE CHART (ADMIN / EXEC ONLY)    */}
+      {/* SECTION 2: DYNAMIC LIVE OPERATIONAL TIMELINE & OPERATIONAL SUMMARY        */}
       {/* ========================================================================= */}
       {isAdmin ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-              <Clock size={16} className="text-blue-600" />
-              <span>Dynamic Live Operational Timeline Chart (Admin View)</span>
-            </h2>
-            <span className="text-xs text-slate-500">
-              Real-time multi-job Gantt matrix with 1-second live cursor
-            </span>
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 items-stretch">
+          {/* Left: Dynamic Live Operational Timeline (3 of 4 columns on desktop) */}
+          <div className="xl:col-span-3 min-w-0">
+            <LiveTimelineChart
+              jobs={timelineOverviewData.length > 0 ? timelineOverviewData : jobs}
+              loading={refreshing}
+              selectedJobId={selectedJobId}
+              onSelectJob={(j) => setSelectedJobId(j.id)}
+              onOpenHistory={(jId) => {
+                setHistoryJobId(jId);
+                setHistoryDrawerOpen(true);
+              }}
+              onOpenProgress={(j) => {
+                setProgressModalJob(j);
+                setProgressModalOpen(true);
+              }}
+              onOpenHandover={(j) => openHandoverModal(j)}
+              onRefresh={() => fetchAllData(true)}
+            />
           </div>
 
-          <LiveTimelineChart
-            jobs={timelineOverviewData.length > 0 ? timelineOverviewData : jobs}
-            loading={refreshing}
-            selectedJobId={selectedJobId}
-            onSelectJob={(j) => setSelectedJobId(j.id)}
-            onOpenHistory={(jId) => {
-              setHistoryJobId(jId);
-              setHistoryDrawerOpen(true);
-            }}
-            onOpenProgress={(j) => {
-              setProgressModalJob(j);
-              setProgressModalOpen(true);
-            }}
-            onOpenHandover={(j) => openHandoverModal(j)}
-            onRefresh={() => fetchAllData(true)}
-          />
+          {/* Right: Operational Summary Card (1 of 4 columns on desktop) */}
+          <div className="xl:col-span-1 min-w-0">
+            <OperationalSummaryCard jobs={jobs} />
+          </div>
         </div>
       ) : (
-        <div className="p-4 rounded-xl bg-blue-50/80 border border-blue-200 text-blue-900 text-xs flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck size={18} className="text-blue-600 shrink-0" />
-            <span>
-              Logged in as <strong>{user?.username || 'Staff'}</strong> ({user?.role || 'User'}). Operational Timeline Gantt Chart is restricted to Administrators. Below are your assigned jobs.
-            </span>
-          </div>
+        <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 text-sm">
+          Dynamic timeline tracking is restricted to Executive and Administrative roles.
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 3: LIVE JOB ACTIVITY & HANDOVER TABLE                             */}
+      {/* SECTION 3: LIVE JOB ACTIVITY & HANDOVER TABLE (EXACT IMAGE 2 MATCH)       */}
       {/* ========================================================================= */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        {/* Table Controls */}
-        <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gradient-to-r from-slate-50 via-white to-slate-50/60">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-bold text-slate-900 tracking-tight">Live Active Jobs & Planning Control Center</h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 text-xs font-bold border border-blue-200/60">
-                {filteredJobs.length} {filteredJobs.length === 1 ? 'Job' : 'Jobs'}
-              </span>
-            </div>
-            <p className="text-slate-500 text-xs mt-0.5 flex items-center gap-1.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              1-second live ticking timers, worker accountability badges & inline shift handover modal
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-              <span>Real-Time Sync</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Search & Filter Bar (Inside Table Container - Exact UI Match) */}
-        <div className="px-6 py-3 bg-slate-50/70 border-b border-slate-200/80 flex flex-wrap items-end gap-3 text-xs">
-          {/* Search Job */}
-          <div className="flex-1 min-w-[220px]">
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">Search Job</label>
-            <input
-              type="text"
-              placeholder="Search Job No, Panel or Customer..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-[34px] px-3 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500/20 shadow-2xs font-medium"
-            />
-          </div>
-
-          {/* Department */}
-          <div className="w-[180px]">
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">Department</label>
-            <select
-              value={filterDept}
-              onChange={(e) => {
-                setFilterDept(e.target.value);
-                setActiveBottomTab('all');
-              }}
-              className="w-full h-[34px] px-2.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500/20 shadow-2xs font-medium cursor-pointer"
-            >
-              <option value="all">All Departments</option>
-              <option value="marketing">Marketing</option>
-              <option value="design">Electrical Design</option>
-              <option value="mechanical">Mechanical Design</option>
-              <option value="purchase">Procurement</option>
-              <option value="production">Production</option>
-              <option value="qc">Quality Control (QC)</option>
-              <option value="dispatch">Dispatch</option>
-            </select>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm('');
-                setFilterDept('all');
-                setFilterStatus('all');
-                setFilterPriority('all');
-                setActiveBottomTab('all');
-                setActiveKpiFilter('all');
-              }}
-              className="h-[34px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-300 rounded-lg cursor-pointer shadow-2xs transition-colors"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrentPage(1)}
-              className="h-[34px] px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer shadow-2xs transition-colors"
-            >
-              Filter
-            </button>
-          </div>
-
-          {(searchTerm || filterDept !== 'all' || activeBottomTab !== 'all' || activeKpiFilter !== 'all') && (
-            <div className="w-full flex items-center justify-between pt-1">
-              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-                Filters Active ({filteredJobs.length} {filteredJobs.length === 1 ? 'Job' : 'Jobs'})
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Department Tabs Navigation (Top Side - Between Search Filter & Table Contents) */}
-        <div className="border-b border-slate-200/80 bg-white px-6 py-2.5">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {BOTTOM_TABS.map((tab) => {
-              const isActive = activeBottomTab === tab.key;
-              const count = tab.key === 'all'
-                ? jobs.length
-                : jobs.filter(j => {
-                    const jStage = String(j.currentStage || '').toLowerCase();
-                    const jDept = String(j.department || '').toLowerCase();
-                    const jDeptKey = String(j.departmentKey || '').toLowerCase();
-                    return jStage.includes(tab.key) || jDept.includes(tab.key) || jDeptKey.includes(tab.key);
-                  }).length;
-
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => {
-                    setActiveBottomTab(tab.key);
-                    if (tab.key !== 'all') {
-                      setFilterDept('all');
-                    }
-                  }}
-                  className={`h-8 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-blue-600 text-white font-bold shadow-2xs border border-blue-600'
-                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs'
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
-              <tr>
-                <th className="py-3.5 px-4 w-[240px]">Job ID & Panel</th>
-                <th className="py-3.5 px-3 w-[100px]">Priority</th>
-                <th className="py-3.5 px-3 w-[120px]">Status</th>
-                <th className="py-3.5 px-4 w-[180px]">Current Worker & Position</th>
-                <th className="py-3.5 px-3 w-[160px]">Prev / Next Assignee</th>
-                <th className="py-3.5 px-4 font-mono w-[140px]">Live Elapsed Time</th>
-                <th className="py-3.5 px-4 w-[140px]">Progress / Budget</th>
-                <th className="py-3.5 px-4 text-center w-[170px]">Handover</th>
-                <th className="py-3.5 px-4 text-right w-[160px]">Execution Controls</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-normal bg-white">
-              {paginatedJobs.length === 0 ? (
-                <tr>
-                  <td colSpan="9" className="py-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <Clock size={24} className="text-slate-300" />
-                      <p className="font-medium text-slate-500">No jobs currently matching your active filter.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                paginatedJobs.map((j) => {
-                  const elapsedSeconds = getJobElapsedSeconds(j);
-                  const isRunning = j.status === 'Running' || j.status === 'In Progress';
-                  const isPaused = j.status === 'Paused';
-                  const isCompleted = j.status === 'Completed';
-                  const isDraft = j.status === 'Draft' || j.status === 'Scheduled';
-                  const isSelected = selectedJobId === j.id;
-
-                  const estSeconds = j.estimatedDurationSeconds || 28800;
-                  const budgetPercent = Math.min(100, Math.round((elapsedSeconds / estSeconds) * 100));
-                  const isOverrun = elapsedSeconds > estSeconds;
-
-                  return (
-                    <tr
-                      key={j.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        isSelected ? 'bg-blue-50/50 ring-1 ring-inset ring-blue-200' : ''
-                      }`}
-                    >
-                      {/* 1. Job ID & Panel */}
-                      <td className="py-3.5 px-4 align-top">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setSelectedJobId(j.id)}
-                            className="font-bold text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 cursor-pointer transition-colors"
-                            title="Focus in Timeline Chart"
-                          >
-                            <span>#{j.jobNo}</span>
-                            <Eye size={12} className="opacity-70" />
-                          </button>
-                        </div>
-                        <div className="text-slate-900 font-bold text-xs mt-1.5 leading-snug">
-                          {j.panelName || 'Industrial Panel'}
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                          {j.clientName || 'General Client'}
-                        </div>
-                      </td>
-
-                      {/* 2. Priority */}
-                      <td className="py-3.5 px-3 align-top">
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
-                            j.priority === 'Urgent'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : j.priority === 'High'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-slate-100 text-slate-700 border border-slate-200/60'
-                          }`}
-                        >
-                          {j.priority === 'Urgent' && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping" />}
-                          {j.priority || 'Normal'}
-                        </span>
-                      </td>
-
-                      {/* 3. Status */}
-                      <td className="py-3.5 px-3 align-top">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                            isRunning
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : isPaused
-                              ? 'bg-amber-50 text-amber-800 border-amber-200'
-                              : isCompleted
-                              ? 'bg-blue-50 text-blue-800 border-blue-200'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          {isRunning && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />}
-                          {isPaused && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
-                          {isCompleted && <CheckCircle2 size={12} className="text-blue-600" />}
-                          {isDraft && <Clock size={12} className="text-slate-500" />}
-                          <span>{j.status}</span>
-                        </span>
-                      </td>
-
-                      {/* 4. Current Worker & Position */}
-                      <td className="py-3.5 px-4 align-top">
-                        <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                          <UserCheck size={14} className="text-blue-600 shrink-0" />
-                          <span className="truncate max-w-[150px]">{j.currentWorkerName || j.assignedEngineer || 'Unassigned'}</span>
-                        </div>
-                        <div className="inline-flex items-center text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 rounded-md mt-1">
-                          {j.currentWorkerPosition || 'Engineer'}
-                        </div>
-                      </td>
-
-                      {/* 5. Prev / Next Assignee */}
-                      <td className="py-3.5 px-3 align-top">
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                          <span className="text-slate-400 font-medium">Prev:</span>
-                          <span className="font-medium text-slate-600">{j.previousWorkerName || '—'}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-700 font-semibold mt-1 flex items-center gap-1">
-                          <span className="text-slate-400 font-medium">Next:</span>
-                          <span className={j.nextWorkerName && j.nextWorkerName !== 'Not yet assigned' ? 'text-indigo-700' : 'text-slate-400'}>
-                            {j.nextWorkerName || 'Not yet assigned'}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* 6. Live Elapsed Time */}
-                      <td className="py-3.5 px-4 align-top font-mono font-bold">
-                        <div className="flex items-center gap-1.5">
-                          <Clock size={14} className={isRunning ? 'text-emerald-600 animate-spin-slow' : 'text-slate-400'} />
-                          <span className={`text-sm font-extrabold tracking-tight ${isRunning ? 'text-emerald-700' : isPaused ? 'text-amber-700' : 'text-slate-800'}`}>
-                            {formatTime(elapsedSeconds)}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-sans mt-0.5">
-                          Est: {(estSeconds / 3600).toFixed(1)}h
-                        </div>
-                      </td>
-
-                      {/* 7. Progress / Budget */}
-                      <td className="py-3.5 px-4 align-top min-w-[130px]">
-                        <div className="flex justify-between items-center text-[11px] font-bold mb-1">
-                          <span className={isOverrun ? 'text-rose-600' : 'text-slate-700'}>
-                            {budgetPercent}% used
-                          </span>
-                          {isOverrun && <span className="text-[10px] text-rose-500 font-bold px-1.5 py-0.2 rounded bg-rose-50 border border-rose-200">OVERRUN</span>}
-                        </div>
-                        <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isOverrun ? 'bg-rose-500' : budgetPercent > 80 ? 'bg-amber-500' : 'bg-emerald-500'
-                            }`}
-                            style={{ width: `${Math.min(100, budgetPercent)}%` }}
-                          />
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium mt-1">
-                          {j.progressPercentage ?? 0}% completed
-                        </div>
-                      </td>
-
-                      {/* 8. Handover & Quick Actions */}
-                      <td className="py-3.5 px-4 align-top text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => openHandoverModal(j)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-300/80 shadow-2xs transition-all cursor-pointer"
-                            title="Transfer work to another engineer or shift"
-                          >
-                            <ArrowRightLeft size={13} />
-                            <span>Handover</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setProgressModalJob(j);
-                              setProgressModalOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold border border-indigo-300/80 shadow-2xs transition-all cursor-pointer"
-                            title="Record progress percentage and units"
-                          >
-                            <Activity size={13} />
-                            <span>Progress</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setTimelineDrawerJob(j);
-                              setTimelineDrawerOpen(true);
-                            }}
-                            className="inline-flex items-center p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 shadow-2xs transition-all cursor-pointer"
-                            title="View Day-Wise Formula Milestones & Delay Tracking"
-                          >
-                            <Calendar size={13} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setHistoryJobId(j.id);
-                              setHistoryDrawerOpen(true);
-                            }}
-                            className="inline-flex items-center p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 shadow-2xs transition-all cursor-pointer"
-                            title="View chronological audit history"
-                          >
-                            <Clock size={13} />
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* 9. Execution Controls */}
-                      <td className="py-3.5 px-4 align-top text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {isDraft && (
-                            <button
-                              onClick={() => handleStart(j.id)}
-                              disabled={actionLoading === `start-${j.id}`}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                            >
-                              <Play size={12} fill="currentColor" />
-                              <span>Start</span>
-                            </button>
-                          )}
-
-                          {isRunning && (
-                            <>
-                              <button
-                                onClick={() => openPauseModal(j.id)}
-                                disabled={actionLoading === `pause-${j.id}`}
-                                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                              >
-                                <Pause size={12} fill="currentColor" />
-                                <span>Pause</span>
-                              </button>
-                              <button
-                                onClick={() => handleComplete(j.id)}
-                                disabled={actionLoading === `complete-${j.id}`}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                              >
-                                <CheckCircle2 size={12} />
-                                <span>Finish</span>
-                              </button>
-                            </>
-                          )}
-
-                          {isPaused && (
-                            <>
-                              <button
-                                onClick={() => handleResume(j.id)}
-                                disabled={actionLoading === `resume-${j.id}`}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                              >
-                                <Play size={12} fill="currentColor" />
-                                <span>Resume</span>
-                              </button>
-                              <button
-                                onClick={() => handleComplete(j.id)}
-                                disabled={actionLoading === `complete-${j.id}`}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                              >
-                                <CheckCircle2 size={12} />
-                                <span>Finish</span>
-                              </button>
-                            </>
-                          )}
-
-                          {isCompleted && (
-                            <span className="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-50 border border-slate-200 rounded-md">Archived</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Centered Table Pagination with Clickable Page Numbers (First, 1, 2, 3..., Next) */}
-        {filteredJobs.length > 0 && (
-          <div className="py-3 px-6 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
-            {/* First Page Button */}
-            <button
-              onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
-              className="h-8 px-2.5 sm:px-3 rounded-[3px] bg-white border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              title="Navigate to First Page"
-            >
-              First
-            </button>
-
-            {/* Clickable Page Numbers (1, 2, 3...) */}
-            <div className="flex items-center gap-1 mx-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`h-8 w-8 rounded-[3px] text-xs font-bold transition-all cursor-pointer border flex items-center justify-center ${
-                    currentPage === pageNum
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-300 shadow-2xs'
-                  }`}
-                  title={`Page ${pageNum}`}
-                >
-                  {pageNum}
-                </button>
-              ))}
-            </div>
-
-            {/* Next Page Button */}
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="h-8 px-2.5 rounded-[3px] bg-white border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              title="Next Page"
-            >
-              Next
-            </button>
-          </div>
-        )}
-      </div>
+      <LiveJobsTable
+        jobs={jobs}
+        selectedJobId={selectedJobId}
+        onSelectJob={(j) => setSelectedJobId(j.id)}
+        onOpenHandover={(j) => openHandoverModal(j)}
+        onOpenProgress={(j) => {
+          setProgressModalJob(j);
+          setProgressModalOpen(true);
+        }}
+        onOpenTimeline={(j) => {
+          setTimelineDrawerJob(j);
+          setTimelineDrawerOpen(true);
+        }}
+        onOpenHistory={(jId) => {
+          setHistoryJobId(jId);
+          setHistoryDrawerOpen(true);
+        }}
+        onStartJob={(jId) => handleStart(jId)}
+        onPauseJob={(jId) => openPauseModal(jId)}
+        onResumeJob={(jId) => handleResume(jId)}
+        actionLoading={actionLoading}
+        currentTimeMs={currentTimeMs}
+      />
 
       {/* ========================================================================= */}
       {/* SECTION 5: REAL-TIME TOAST NOTIFICATIONS (OVERLAY)                        */}
@@ -1491,7 +1052,7 @@ export default function KevalDashboard() {
 
             {/* Drawer Content */}
             <div className="flex-1 overflow-y-auto p-4 bg-[#f5f6f8]">
-              <div className="bg-white border border-slate-300 rounded-[6px] p-4 shadow-2xs">
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
                 <DepartmentTimelineViewer
                   jobId={timelineDrawerJob.id}
                   user={user}

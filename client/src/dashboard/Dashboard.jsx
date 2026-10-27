@@ -177,7 +177,7 @@ export default function Dashboard() {
         {/* Pill Button: Create Job */}
         <button
           onClick={() => navigate('/jobs/new')}
-          className="h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-bold text-white bg-[#0000AA] hover:bg-blue-900 shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
+          className="h-[34px] px-3 sm:px-3.5 rounded-full flex items-center gap-1.5 text-xs font-bold text-white bg-[#0000AA] hover:bg-[#000088] shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
           title="Create Job"
         >
           <PlusCircle size={15} strokeWidth={2.2} />
@@ -227,7 +227,7 @@ export default function Dashboard() {
           {isAdmin && selectedDept !== 'all' && (
             <button
               onClick={() => setSelectedDept('all')}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60"
+              className="text-xs font-semibold text-[#0000AA] hover:text-[#000088] flex items-center gap-1 cursor-pointer bg-[#0000AA]/5 px-2.5 py-1 rounded-[7px] border border-[#0000AA]/20"
             >
               <X size={12} /> Clear Filter
             </button>
@@ -254,15 +254,15 @@ export default function Dashboard() {
                 {idx < TRACKED_DEPTS.length - 1 && (
                   <div className="relative flex items-center justify-center shrink-0 my-1 lg:my-0 lg:w-8 xl:w-10 h-7 lg:h-auto" title="Pipeline Flow">
                     {/* Horizontal Pipeline Pipe (Desktop) */}
-                    <div className="hidden lg:block absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-slate-300 via-blue-400 to-slate-300 rounded-full" />
+                    <div className="hidden lg:block absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-slate-300 via-[#0000AA]/50 to-slate-300 rounded-full" />
                     
                     {/* Vertical Pipeline Pipe (Mobile) */}
-                    <div className="block lg:hidden absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-gradient-to-b from-slate-300 via-blue-400 to-slate-300 rounded-full" />
+                    <div className="block lg:hidden absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-gradient-to-b from-slate-300 via-[#0000AA]/50 to-slate-300 rounded-full" />
 
                     {/* Edge Node Badge with Directional Arrow */}
-                    <div className="relative z-10 w-6 h-6 rounded-full bg-white border-2 border-blue-600 shadow-xs flex items-center justify-center text-blue-600 transition-transform duration-200 hover:scale-110">
-                      <ChevronRight size={13} className="hidden lg:block text-blue-600" strokeWidth={2.5} />
-                      <ChevronDown size={13} className="block lg:hidden text-blue-600" strokeWidth={2.5} />
+                    <div className="relative z-10 w-6 h-6 rounded-full bg-white border-2 border-[#0000AA] shadow-xs flex items-center justify-center text-[#0000AA] transition-transform duration-200 hover:scale-110">
+                      <ChevronRight size={13} className="hidden lg:block text-[#0000AA]" strokeWidth={2.5} />
+                      <ChevronDown size={13} className="block lg:hidden text-[#0000AA]" strokeWidth={2.5} />
                     </div>
                   </div>
                 )}

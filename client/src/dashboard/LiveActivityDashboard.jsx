@@ -50,6 +50,14 @@ export default function LiveActivityDashboard() {
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState('all');
   const [sseConnected, setSseConnected] = useState(false);
+  const [collapsedDates, setCollapsedDates] = useState({});
+
+  const toggleDateCollapse = (dateLabel) => {
+    setCollapsedDates(prev => ({
+      ...prev,
+      [dateLabel]: !prev[dateLabel]
+    }));
+  };
 
   // Fetch all department activities (PostgreSQL department_activities)
   const fetchData = async () => {
@@ -362,23 +370,35 @@ export default function LiveActivityDashboard() {
             </div>
           ) : (
             <div className="space-y-8">
-              {groupedActivities.map((group) => (
-                <div key={group.label} className="space-y-4">
-                  {/* Date Group Heading with count badge */}
-                  <div className="flex items-center justify-between px-1 py-1">
-                    <div className="flex items-center gap-2">
-                      <ChevronDown size={15} className="text-slate-400" />
-                      <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                        {group.label}
-                      </h3>
-                    </div>
-                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
-                      {group.items.length}
-                    </span>
-                  </div>
+              {groupedActivities.map((group) => {
+                const isCollapsed = Boolean(collapsedDates[group.label]);
+                return (
+                  <div key={group.label} className="space-y-4">
+                    {/* Date Group Heading with count badge and click-to-collapse */}
+                    <button
+                      type="button"
+                      onClick={() => toggleDateCollapse(group.label)}
+                      className="w-full flex items-center justify-between px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors text-left select-none group/date"
+                    >
+                      <div className="flex items-center gap-2">
+                        <ChevronDown
+                          size={15}
+                          className={`text-slate-500 transition-transform duration-200 group-hover/date:text-slate-800 ${
+                            isCollapsed ? '-rotate-90 text-slate-400' : 'rotate-0 text-slate-600'
+                          }`}
+                        />
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider group-hover/date:text-indigo-700 transition-colors">
+                          {group.label}
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                        {group.items.length} {group.items.length === 1 ? 'event' : 'events'}
+                      </span>
+                    </button>
 
-                  {/* Chronological Vertical Timeline */}
-                  <div className="relative pl-6 sm:pl-28">
+                    {/* Chronological Vertical Timeline (Collapsible) */}
+                    {!isCollapsed && (
+                      <div className="relative pl-6 sm:pl-28 animate-in fade-in duration-150">
                     {/* Continuous vertical guideline running down */}
                     <div className="absolute left-[11px] sm:left-[95px] top-4 bottom-4 w-[2px] bg-slate-200" />
 
@@ -463,8 +483,10 @@ export default function LiveActivityDashboard() {
                       })}
                     </div>
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
+            );
+          })}
             </div>
           )}
         </div>

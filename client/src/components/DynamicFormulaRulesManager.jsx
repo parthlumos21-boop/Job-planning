@@ -50,10 +50,9 @@ export default function DynamicFormulaRulesManager({ user, onClose, selectedJob,
       const dKey = (r.department || '').toLowerCase().trim();
       if (simulationData?.timeline?.departments?.[dKey]) {
         deptTotals[dKey] = simulationData.timeline.departments[dKey].duration_days;
-      } else {
         const base = Number(r.base_days) || 1;
         const extra = (r.condition_modifiers || []).reduce((acc, m) => acc + (Number(m.additionalDays) || 0), 0);
-        deptTotals[dKey] = Math.max(1, Math.round((base + extra) * (Number(r.multiplier) || 1.0)));
+        deptTotals[dKey] = Math.max(1, Math.round(base + extra));
       }
     });
 
@@ -138,10 +137,6 @@ export default function DynamicFormulaRulesManager({ user, onClose, selectedJob,
     setRules(prev => prev.map(r => r.department === dept ? { ...r, base_days: parseInt(newBase) || 1 } : r));
   };
 
-  const handleUpdateMultiplier = (dept, newMult) => {
-    setRules(prev => prev.map(r => r.department === dept ? { ...r, multiplier: parseFloat(newMult) || 1.0 } : r));
-  };
-
   const handleAddModifier = (dept) => {
     const defaultField = fieldDefinitions[0]?.field_key || 'panel_type';
     const defaultOpt = fieldDefinitions[0]?.options?.[0]?.value || 'PLC';
@@ -199,7 +194,7 @@ export default function DynamicFormulaRulesManager({ user, onClose, selectedJob,
       await api.put(`/planning/rules/${deptRule.department}`, {
         base_days: deptRule.base_days,
         condition_modifiers: deptRule.condition_modifiers || [],
-        multiplier: deptRule.multiplier || 1.0,
+        multiplier: 1.0,
         description: deptRule.description || '',
         is_active: deptRule.is_active ?? true
       });
@@ -419,22 +414,6 @@ export default function DynamicFormulaRulesManager({ user, onClose, selectedJob,
                     className="w-full h-[32px] px-2.5 rounded-[3px] border border-slate-300 font-bold text-xs text-slate-900 bg-white focus:border-blue-500 focus:outline-none transition-colors"
                   />
                   <span className="text-[10px] text-slate-500 mt-0.5 block">Starting duration before any additional day rules</span>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Capacity Multiplier (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0.5"
-                    max="3.0"
-                    value={selectedRule.multiplier}
-                    onChange={(e) => handleUpdateMultiplier(selectedRule.department, e.target.value)}
-                    className="w-full h-[32px] px-2.5 rounded-[3px] border border-slate-300 font-bold text-xs text-slate-900 bg-white focus:border-blue-500 focus:outline-none transition-colors"
-                  />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">Default 1.0 (multiplier for batch capacity scaling)</span>
                 </div>
 
                 <div>

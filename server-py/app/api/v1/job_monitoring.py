@@ -70,7 +70,7 @@ async def get_running_jobs(
     user: UserPayload = Depends(require_admin)
 ):
     now = datetime.now(timezone.utc)
-    stmt = select(Job).order_by(Job.external_id.asc())
+    stmt = select(Job).order_by(Job.id.desc())
     res = await db.execute(stmt)
     all_jobs = res.scalars().all()
 

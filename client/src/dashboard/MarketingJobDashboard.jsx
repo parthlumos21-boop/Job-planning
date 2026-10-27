@@ -268,12 +268,9 @@ export default function MarketingJobDashboard() {
           <div>
             <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <span>Marketing Register &amp; Dispatch Tracking</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                Live Operations
-              </span>
             </h1>
             <p className="text-[11px] text-slate-500 font-medium">
-              Welcome, <strong className="text-slate-700">{user?.name || user?.username || 'Marketing User'}</strong> &bull; Commercial readiness, design release &amp; delivery milestones
+              Welcome, <strong className="text-slate-700">{user?.name || user?.username || 'Marketing User'}</strong>
             </p>
           </div>
         </div>

@@ -126,13 +126,16 @@ def match_condition(param_value: Any, op: str, rule_value: Any) -> bool:
 def evaluate_department_formula(
     base_days: int,
     condition_modifiers: list[dict],
-    multiplier: float,
-    job_params: dict[str, Any]
+    multiplier: float = 1.0,
+    job_params: dict[str, Any] = None
 ) -> tuple[int, list[dict]]:
     """
     Calculates duration in working days for a department given job parameters.
+    Direct day-wise calculation: Base Days + Sum of Matched Condition Additional Days.
     Returns (total_working_days, applied_modifiers_list)
     """
+    if job_params is None:
+        job_params = {}
     applied_modifiers = []
     total_days = float(base_days)
 
@@ -153,7 +156,7 @@ def evaluate_department_formula(
                 "matchedValue": param_val
             })
 
-    total_days = total_days * float(multiplier or 1.0)
+    # Direct day-wise calculation: Base Days + Condition Days
     final_days = max(1, round(total_days))
     return final_days, applied_modifiers
 

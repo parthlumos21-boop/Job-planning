@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Clock, User, Play, Pause, CheckCircle2, AlertTriangle,
   ZoomIn, ArrowRightLeft, Calendar, Sparkles, RefreshCw,
-  Search, Sliders, ChevronRight, Eye, ShieldCheck, Activity
+  Search, Sliders, ChevronRight, Eye, ShieldCheck, Activity, Layers
 } from 'lucide-react';
 
 /**
@@ -50,7 +50,6 @@ export default function LiveTimelineChart({
   const [zoomMode, setZoomMode] = useState('dynamic'); // 'shift' | 'day' | 'week' | 'month' | 'dynamic'
   const [nowMs, setNowMs] = useState(Date.now());
   const [filterWorker, setFilterWorker] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
   const [timelineSearch, setTimelineSearch] = useState('');
   const [hoveredTooltip, setHoveredTooltip] = useState(null);
   const scrollContainerRef = useRef(null);
@@ -66,9 +65,6 @@ export default function LiveTimelineChart({
   // Filter jobs for timeline chart
   const displayedJobs = useMemo(() => {
     return jobs.filter((j) => {
-      if (filterStatus !== 'all' && (j.status || 'Draft').toLowerCase() !== filterStatus.toLowerCase()) {
-        return false;
-      }
       if (filterWorker !== 'all') {
         const worker = String(j.currentWorkerName || '').toLowerCase();
         if (!worker.includes(filterWorker.toLowerCase())) return false;
@@ -82,7 +78,7 @@ export default function LiveTimelineChart({
       }
       return true;
     });
-  }, [jobs, filterStatus, filterWorker, timelineSearch]);
+  }, [jobs, filterWorker, timelineSearch]);
 
   // Dynamic Scale Range Calculation
   const scale = useMemo(() => {
@@ -183,6 +179,18 @@ export default function LiveTimelineChart({
     return Math.max(0.5, endP - startP);
   };
 
+  // Calculate dynamic canvas min-width based on zoom mode & tick count to ensure zero text collision
+  const canvasMinWidth = useMemo(() => {
+    const basePerTick = 110;
+    const ticksCount = scale?.ticks?.length || 0;
+    const computedFromTicks = ticksCount * basePerTick + 360; // 340px frozen column + margin
+    if (zoomMode === 'month') return Math.max(3000, computedFromTicks);
+    if (zoomMode === 'week') return Math.max(2400, computedFromTicks);
+    if (zoomMode === 'day') return Math.max(2000, computedFromTicks);
+    if (zoomMode === 'shift') return Math.max(1800, computedFromTicks);
+    return Math.max(1800, computedFromTicks);
+  }, [zoomMode, scale.ticks]);
+
   // Auto-scroll timeline to live red cursor on initial mount or zoom
   useEffect(() => {
     if (scrollContainerRef.current) {
@@ -193,125 +201,145 @@ export default function LiveTimelineChart({
   }, [zoomMode]);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden flex flex-col">
-      {/* Top Controls Toolbar */}
-      <div className="p-4 border-b border-slate-200/80 bg-slate-50/70 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Live Pulsing Badge */}
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            <span>LIVE OPERATIONAL TIMELINE</span>
-            <span className="text-[10px] text-emerald-600 font-mono">
-              {new Date(nowMs).toLocaleTimeString()}
-            </span>
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden flex flex-col h-full min-h-[380px]">
+      {/* 1. Internal Card Header (Exact Image 1 Match) */}
+      <div className="px-4 py-3 border-b border-slate-200/80 bg-white flex items-center justify-between">
+        <h3 className="text-sm font-bold text-slate-800 tracking-tight">
+          Dynamic Live Operational Timeline
+        </h3>
+
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-blue-600 rounded-[7px] text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+            title="Refresh timeline records"
+          >
+            <RefreshCw size={13} className={`text-blue-600 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        )}
+      </div>
+
+      {/* 2. Controls Toolbar (Exact Image 1 Match) */}
+      <div className="px-4 py-2.5 border-b border-slate-200/80 bg-slate-50/60 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Live Badge (Image 1: Green Pill with Dot) */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-[7px] bg-emerald-50 border border-emerald-300 text-emerald-700 text-xs font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live</span>
           </div>
 
-          {/* Quick Filter: Search */}
-          <div className="relative min-w-[180px]">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          {/* Search Input */}
+          <div className="relative w-44 sm:w-56">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={timelineSearch}
               onChange={(e) => setTimelineSearch(e.target.value)}
               placeholder="Search job or worker..."
-              className="w-full pl-8 pr-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500"
+              className="w-full pl-8 pr-2.5 py-1 bg-white border border-slate-200 rounded-[7px] text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 text-slate-800 placeholder-slate-400 font-medium"
             />
           </div>
-
-          {/* Status Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">All Statuses</option>
-            <option value="running">Running Only</option>
-            <option value="paused">Paused Only</option>
-            <option value="draft">Scheduled / Draft</option>
-            <option value="completed">Completed</option>
-          </select>
         </div>
 
-        {/* Zoom & Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Zoom Modes */}
-          <div className="flex items-center bg-white border border-slate-200 p-0.5 rounded-lg text-xs font-semibold text-slate-600 shadow-xs">
+        {/* Zoom Modes & Calendar Button (Image 1 Right Toolbar) */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center bg-white border border-slate-200 p-0.5 rounded-[7px] text-xs font-semibold text-slate-600 shadow-2xs">
             <button
               onClick={() => setZoomMode('shift')}
-              className={`px-2.5 py-1 rounded-md transition-all ${zoomMode === 'shift' ? 'bg-blue-600 text-white shadow-xs' : 'hover:text-slate-900'}`}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                zoomMode === 'shift'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-400 font-bold shadow-2xs'
+                  : 'hover:text-slate-900 border border-transparent'
+              }`}
               title="8-Hour Shift Window"
             >
               8h Shift
             </button>
             <button
               onClick={() => setZoomMode('day')}
-              className={`px-2.5 py-1 rounded-md transition-all ${zoomMode === 'day' ? 'bg-blue-600 text-white shadow-xs' : 'hover:text-slate-900'}`}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                zoomMode === 'day'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-400 font-bold shadow-2xs'
+                  : 'hover:text-slate-900 border border-transparent'
+              }`}
               title="24-Hour Day Window"
             >
               24h Day
             </button>
             <button
               onClick={() => setZoomMode('week')}
-              className={`px-2.5 py-1 rounded-md transition-all ${zoomMode === 'week' ? 'bg-blue-600 text-white shadow-xs' : 'hover:text-slate-900'}`}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                zoomMode === 'week'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-400 font-bold shadow-2xs'
+                  : 'hover:text-slate-900 border border-transparent'
+              }`}
               title="7-Day Horizon"
             >
               7 Days
             </button>
             <button
               onClick={() => setZoomMode('month')}
-              className={`px-2.5 py-1 rounded-md transition-all ${zoomMode === 'month' ? 'bg-blue-600 text-white shadow-xs' : 'hover:text-slate-900'}`}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                zoomMode === 'month'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-400 font-bold shadow-2xs'
+                  : 'hover:text-slate-900 border border-transparent'
+              }`}
               title="30-Day Monthly View"
             >
               30 Days
             </button>
             <button
               onClick={() => setZoomMode('dynamic')}
-              className={`px-2.5 py-1 rounded-md transition-all ${zoomMode === 'dynamic' ? 'bg-blue-600 text-white shadow-xs' : 'hover:text-slate-900'}`}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                zoomMode === 'dynamic'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-400 font-bold shadow-2xs'
+                  : 'text-blue-600 hover:text-blue-800 border border-transparent'
+              }`}
               title="Auto-Fit All Jobs"
             >
               Auto-Fit
             </button>
           </div>
 
-          {/* Refresh Button */}
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              disabled={loading}
-              className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors shadow-xs"
-              title="Refresh timeline records"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin text-blue-600' : ''} />
-            </button>
-          )}
+          {/* Calendar Picker Icon Button */}
+          <button
+            type="button"
+            onClick={() => setZoomMode('dynamic')}
+            className="p-1.5 bg-white border border-slate-200 rounded-[7px] text-slate-600 hover:text-blue-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+            title="Jump to date"
+          >
+            <Calendar size={14} />
+          </button>
         </div>
       </div>
 
-      {/* Timeline Gantt Grid Matrix */}
-      <div className="relative overflow-x-auto flex-1 min-h-[380px] max-h-[580px]" ref={scrollContainerRef}>
-        <div className="min-w-[980px] w-full flex flex-col">
+      {/* Timeline Gantt Grid Matrix with Internal Horizontal Scroll */}
+      <div className="relative overflow-x-auto flex-1 min-h-[380px] max-h-[580px] scrollbar-thin scrollbar-thumb-slate-300 hover:scrollbar-thumb-slate-400 scrollbar-track-slate-100 pb-1" ref={scrollContainerRef}>
+        <div className="w-full flex flex-col" style={{ minWidth: `${canvasMinWidth}px` }}>
           {/* Header Row: Left Columns + Right Time Axis */}
-          <div className="flex border-b border-slate-200 bg-slate-100/90 sticky top-0 z-20 shadow-xs">
+          <div className="flex border-b border-slate-200 bg-slate-100/90 sticky top-0 z-30 shadow-xs">
             {/* Frozen Left Columns Header */}
-            <div className="w-[340px] shrink-0 px-4 py-2.5 flex items-center justify-between border-r border-slate-200 bg-slate-100 font-bold text-xs text-slate-700 uppercase tracking-wider">
+            <div className="w-[340px] shrink-0 px-4 py-2.5 flex items-center justify-between border-r border-slate-200 bg-slate-100 sticky left-0 z-30 font-bold text-xs text-slate-700 uppercase tracking-wider shadow-xs">
               <span>Job & Assignee Details</span>
               <span className="text-[10px] text-slate-500 font-normal">
                 {displayedJobs.length} {displayedJobs.length === 1 ? 'Job' : 'Jobs'}
               </span>
             </div>
 
-            {/* Right Dynamic Time Axis Header */}
-            <div className="flex-1 relative h-10 bg-slate-50/80 overflow-hidden">
+            {/* Right Dynamic Time Axis Header (Crisp Time & Date Ticks) */}
+            <div className="flex-1 relative h-10 bg-slate-50/80 overflow-visible">
               {scale.ticks.map((tick, i) => (
                 <div
                   key={i}
-                  className="absolute top-0 bottom-0 border-l border-slate-200/80 flex flex-col justify-center pl-1.5"
+                  className="absolute top-0 bottom-0 border-l border-slate-200/80 flex flex-col justify-center pl-1.5 pointer-events-none min-w-max"
                   style={{ left: `${tick.pct}%` }}
                 >
-                  <span className="text-[10px] font-bold text-slate-700 leading-tight">
+                  <span className="text-[10px] font-bold text-slate-800 leading-tight whitespace-nowrap tabular-nums">
                     {tick.label}
                   </span>
-                  <span className="text-[9px] text-slate-400 leading-tight">
+                  <span className="text-[8px] font-semibold text-slate-500 leading-tight mt-0.5 whitespace-nowrap tabular-nums">
                     {tick.dateLabel}
                   </span>
                 </div>
@@ -320,10 +348,10 @@ export default function LiveTimelineChart({
               {/* Red Now Cursor Marker Pill in Header */}
               {scale.nowPct >= 0 && scale.nowPct <= 100 && (
                 <div
-                  className="absolute top-0 bottom-0 z-30 pointer-events-none flex flex-col items-center"
+                  className="absolute top-0 bottom-0 z-40 pointer-events-none flex flex-col items-center"
                   style={{ left: `${scale.nowPct}%` }}
                 >
-                  <div className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white font-mono text-[9px] font-bold shadow-xs whitespace-nowrap transform -translate-x-1/2">
+                  <div className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white font-mono text-[8px] font-extrabold shadow-2xs whitespace-nowrap transform -translate-x-1/2">
                     NOW
                   </div>
                 </div>
@@ -373,109 +401,57 @@ export default function LiveTimelineChart({
                     key={job.id}
                     onClick={() => onSelectJob && onSelectJob(job)}
                     className={`flex items-stretch hover:bg-slate-50/80 transition-colors cursor-pointer group ${
-                      isSelected ? 'bg-blue-50/40' : ''
+                      isSelected ? 'bg-[#0000AA]/5' : ''
                     }`}
                   >
-                    {/* Frozen Left Column */}
-                    <div className="w-[340px] shrink-0 p-3 border-r border-slate-200 bg-white group-hover:bg-slate-50/60 flex flex-col justify-between gap-1.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-bold text-xs text-slate-900 group-hover:text-blue-600 transition-colors">
-                            {job.jobNo || `#${job.id}`}
-                          </span>
-                          <span className="text-[11px] text-slate-500 truncate max-w-[140px]" title={job.panelName}>
-                            {job.panelName || 'Standard Panel'}
-                          </span>
+                    {/* Frozen Left Column (Exact Image Match) */}
+                    <div className="w-[340px] shrink-0 p-3 border-r border-slate-200 bg-white group-hover:bg-slate-50/90 sticky left-0 z-20 shadow-xs flex items-center justify-between gap-2.5">
+                      <div className="flex items-start gap-2 min-w-0">
+                        {/* Flow / Department Icon */}
+                        <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200/60 mt-0.5 shrink-0">
+                          <Layers size={14} />
                         </div>
 
-                        {/* Status Badge */}
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
-                            isRunning
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : isPaused
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : isCompleted
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : 'bg-slate-50 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-                          <span>{status}</span>
-                        </span>
-                      </div>
-
-                      {/* Worker & Progress Details */}
-                      <div className="flex items-center justify-between gap-2 text-xs">
-                        {/* Worker Badge */}
-                        <div className="flex items-center gap-1.5 text-slate-600 truncate">
-                          <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {(job.currentWorkerName || 'W').charAt(0).toUpperCase()}
+                        {/* Stacked Details */}
+                        <div className="min-w-0 flex-1">
+                          {/* Line 1: Job Number & Panel Name */}
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-bold text-xs text-blue-600 group-hover:text-blue-800 transition-colors shrink-0">
+                              #{job.jobNo || job.id}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-900 truncate" title={job.panelName}>
+                              {job.panelName || 'Standard Panel'}
+                            </span>
                           </div>
-                          <span className="truncate text-[11px] font-medium" title={job.currentWorkerName}>
-                            {job.currentWorkerName || 'Unassigned'}
-                          </span>
-                        </div>
 
-                        {/* Progress Indicator */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className="bg-indigo-600 h-full rounded-full transition-all"
-                              style={{ width: `${Math.min(100, job.progressPercentage || 0)}%` }}
-                            />
+                          {/* Line 2: Assignee */}
+                          <div className="flex items-center gap-1 text-[11px] text-slate-600 font-medium truncate mt-0.5" title={job.currentWorkerName}>
+                            <User size={11} className="text-slate-400 shrink-0" />
+                            <span className="truncate">{job.currentWorkerName || 'Unassigned'}</span>
                           </div>
-                          <span className="text-[10px] font-bold text-slate-700">
-                            {Math.round(job.progressPercentage || 0)}%
-                          </span>
+
+                          {/* Line 3: Department / Client */}
+                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {job.department || job.departmentKey || 'Production'} • {job.clientName || 'General Client'}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Quick Interactive Actions */}
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                        <span className="text-[10px] text-slate-400">
-                          {job.clientName || 'General Client'}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          {onOpenProgress && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenProgress(job);
-                              }}
-                              className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-colors"
-                              title="Update Progress"
-                            >
-                              Progress
-                            </button>
-                          )}
-                          {onOpenHandover && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenHandover(job);
-                              }}
-                              className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-colors"
-                              title="Shift Handover"
-                            >
-                              Handover
-                            </button>
-                          )}
-                          {onOpenHistory && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenHistory(job.id);
-                              }}
-                              className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors flex items-center gap-0.5"
-                              title="Inspect Full Audit History"
-                            >
-                              <span>History</span>
-                              <ChevronRight size={11} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                      {/* Status Pill Badge (Right-aligned in left column) */}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 inline-flex items-center gap-1 ${
+                          isRunning
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : isPaused
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : isCompleted
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-slate-50 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                        <span>{status}</span>
+                      </span>
                     </div>
 
                     {/* Right Timeline Track Container */}
@@ -492,7 +468,7 @@ export default function LiveTimelineChart({
                       {/* TRACK 1: Planned Schedule Bar (Top Lane) */}
                       {planStartPct !== null && planWidthPct > 0 ? (
                         <div
-                          className="absolute top-2 h-5 rounded-md bg-sky-100/80 border border-sky-300 text-sky-800 text-[10px] font-semibold px-2 flex items-center truncate shadow-2xs hover:bg-sky-200/90 transition-all z-5 cursor-help"
+                          className="absolute top-1.5 h-[18px] rounded-[4px] bg-sky-100/90 border border-sky-300/80 text-sky-900 text-[9px] font-semibold px-1.5 flex items-center truncate shadow-2xs hover:bg-sky-200 transition-all z-5 cursor-help"
                           style={{
                             left: `${planStartPct}%`,
                             width: `${planWidthPct}%`,
@@ -509,11 +485,11 @@ export default function LiveTimelineChart({
                           onMouseLeave={() => setHoveredTooltip(null)}
                         >
                           <span className="truncate">
-                            📋 Planned: {formatTime(job.plannedStartAt)} → {formatTime(job.plannedEndAt)}
+                            📋 Plan: {formatTime(job.plannedStartAt)} – {formatTime(job.plannedEndAt)}
                           </span>
                         </div>
                       ) : (
-                        <div className="absolute top-2 left-3 text-[10px] text-slate-300 italic pointer-events-none">
+                        <div className="absolute top-1.5 left-3 text-[9px] text-slate-300 italic pointer-events-none">
                           No planned window scheduled
                         </div>
                       )}
@@ -521,11 +497,11 @@ export default function LiveTimelineChart({
                       {/* TRACK 2: Actual Execution Bar (Bottom Lane) */}
                       {actStartPct !== null && actWidthPct > 0 ? (
                         <div
-                          className={`absolute top-9 h-7 rounded-lg text-white text-[11px] font-bold px-2.5 flex items-center justify-between shadow-xs transition-all z-10 cursor-pointer ${
+                          className={`absolute top-8 h-7 rounded-[5px] text-white text-[10px] font-bold px-2.5 flex items-center justify-between shadow-2xs transition-all z-10 cursor-pointer ${
                             isRunning
-                              ? 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 animate-pulse'
+                              ? 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600'
                               : isPaused
-                              ? 'bg-amber-500 text-amber-950'
+                              ? 'bg-amber-500 text-white'
                               : isCompleted
                               ? 'bg-indigo-600'
                               : 'bg-slate-400'
@@ -533,7 +509,7 @@ export default function LiveTimelineChart({
                           style={{
                             left: `${actStartPct}%`,
                             width: `${actWidthPct}%`,
-                            minWidth: '32px'
+                            minWidth: '36px'
                           }}
                           onMouseEnter={() =>
                             setHoveredTooltip({
@@ -548,19 +524,17 @@ export default function LiveTimelineChart({
                           onMouseLeave={() => setHoveredTooltip(null)}
                         >
                           <div className="flex items-center gap-1.5 truncate">
-                            {isRunning ? <Play size={11} fill="currentColor" /> : isPaused ? <Pause size={11} /> : <CheckCircle2 size={11} />}
+                            {isRunning ? <Play size={10} fill="currentColor" /> : isPaused ? <Pause size={10} /> : <CheckCircle2 size={10} />}
                             <span className="truncate">
-                              {job.currentWorkerName || 'Active'} • {formatDuration(job.actualDurationSeconds)}
+                              {job.currentWorkerName || 'Active'} - {formatDuration(job.actualDurationSeconds)}
                             </span>
                           </div>
 
-                          {/* Inner Progress indicator */}
-                          <span className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded font-mono">
-                            {job.progressPercentage || 0}%
-                          </span>
+                          {/* Quick View Icon matching Image */}
+                          <Eye size={12} className="opacity-80 shrink-0 ml-1.5" />
                         </div>
                       ) : (
-                        <div className="absolute top-9 left-3 text-[10px] text-slate-400 italic pointer-events-none">
+                        <div className="absolute top-8 left-3 text-[9px] text-slate-400 italic pointer-events-none">
                           Execution not started yet
                         </div>
                       )}
@@ -624,10 +598,10 @@ export default function LiveTimelineChart({
         </div>
       )}
 
-      {/* Footer Legend Bar */}
-      <div className="px-5 py-3 border-t border-slate-200/90 bg-slate-50 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-3">
+      {/* Footer Legend Bar (Exact Image Match) */}
+      <div className="px-5 py-2.5 border-t border-slate-200/90 bg-slate-50 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-3">
         <div className="flex flex-wrap items-center gap-4">
-          <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">Legend:</span>
+          <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">LEGEND:</span>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-2.5 rounded bg-sky-100 border border-sky-300" />
             <span>Planned Window</span>
@@ -649,13 +623,13 @@ export default function LiveTimelineChart({
             <span>Shift Handover Point</span>
           </div>
           <div className="flex items-center gap-1.5 text-rose-600 font-semibold">
-            <span className="w-3 h-0.5 bg-rose-500 border-t border-dashed border-rose-500" />
+            <span className="w-3 border-b-2 border-dashed border-rose-500" />
             <span>Live Ticking Cursor</span>
           </div>
         </div>
 
-        <div className="text-[11px] text-slate-400">
-          Click any row to inspect timeline details • Multi-job real-time Gantt
+        <div className="text-[11px] text-slate-500 font-medium">
+          Click any row to inspect timeline details - Multi-job real-time Chart
         </div>
       </div>
     </div>

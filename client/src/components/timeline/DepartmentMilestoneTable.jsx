@@ -18,9 +18,9 @@ export default function DepartmentMilestoneTable({
   isAdmin
 }) {
   return (
-    <div className="border border-slate-300 rounded-[3px] bg-white overflow-hidden shadow-2xs">
-      {/* Gray Section Header Bar */}
-      <div className="bg-slate-100 border-b border-slate-300 px-3.5 py-2 flex flex-wrap items-center justify-between gap-2">
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      {/* Section Header Bar */}
+      <div className="px-5 py-3 bg-gradient-to-r from-slate-50 via-white to-slate-50/60 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
             Department Milestone Breakdown
@@ -30,7 +30,7 @@ export default function DepartmentMilestoneTable({
         {schedules.length > 0 && (
           <button
             onClick={() => onOpenDelayModal(schedules[0])}
-            className="h-[28px] px-2.5 rounded-[3px] bg-white hover:bg-slate-50 text-blue-700 border border-slate-300 text-xs font-semibold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+            className="h-[28px] px-3 rounded-lg bg-white hover:bg-slate-50 text-blue-700 border border-slate-300 text-xs font-semibold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
           >
             <Plus size={12} />
             <span>+ Add Delay Event</span>
